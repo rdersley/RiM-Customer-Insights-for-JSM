@@ -100,6 +100,10 @@ function App() {
   const [alerts, setAlerts] = useState([]);
   const [pendingRun, setPendingRun] = useState(null);
   const [pdfBusy, setPdfBusy] = useState(false);
+  // Create problem: the open form (one at a time) and what was created, by pattern id.
+  const [problemForm, setProblemForm] = useState(null);
+  const [problems, setProblems] = useState({});
+  const [creatingProblem, setCreatingProblem] = useState(false);
 
   useEffect(() => {
     view.getContext().then((context) => setSiteUrl(String(context?.siteUrl || '').replace(/\/$/, ''))).catch(() => {});
@@ -130,6 +134,41 @@ function App() {
     if (!orgs.some((o) => o.id === alert.organization.id)) return;
     setOrgIds([alert.organization.id]); setFrom(alert.window.from); setTo(alert.window.to); setProjectsText('');
     setPendingRun({ orgId: alert.organization.id, from: alert.window.from, to: alert.window.to });
+  }
+
+  // Remembered per browser so the next problem goes to the same place.
+  const PROBLEM_PREFS = 'ci-problem-target';
+  function openProblemForm(group, index) {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(PROBLEM_PREFS) || '{}'); } catch { /* storage unavailable */ }
+    setProblemForm({ groupId: group.id, projectKey: saved.projectKey || '', issueTypeName: saved.issueTypeName || 'Problem', summary: patternName(group, index), link: true, error: '' });
+  }
+
+  async function createProblem(group, index) {
+    setCreatingProblem(true);
+    const form = problemForm;
+    try {
+      const peak = peakWindow(group.hours);
+      const result = await invoke('createProblem', {
+        projectKey: form.projectKey, issueTypeName: form.issueTypeName, summary: form.summary, link: form.link,
+        keys: (group.keys || group.tickets.map((t) => t.key)).slice(0, 20),
+        details: {
+          description: aiPattern(index)?.summary || group.sampleSummary,
+          organisations: report.organization,
+          period: `${report.startDate} to ${report.endDate}`,
+          count: group.count, previousCount: group.previousCount, estimated: Boolean(group.estimated),
+          where: whereOf(group),
+          when: peak ? `mostly ${windowText(peak)} (${peak.share}%, ${report.timeOfDay?.timeZone || 'UTC'})` : '',
+          resolution: resolutionText(groupResolution(group)),
+          totalKeys: (group.keys || []).length,
+        },
+      });
+      try { localStorage.setItem(PROBLEM_PREFS, JSON.stringify({ projectKey: form.projectKey, issueTypeName: form.issueTypeName })); } catch { /* storage unavailable */ }
+      setProblems((p) => ({ ...p, [group.id]: result }));
+      setProblemForm(null);
+    } catch (e) {
+      setProblemForm((f) => ({ ...f, error: e.message || 'The problem could not be created.' }));
+    } finally { setCreatingProblem(false); }
   }
 
   async function dismissAlert(alert) {
@@ -636,6 +675,42 @@ function App() {
                   return group.estimated ? `Open the ${n} sampled tickets in Jira` : `Open ${n} tickets in Jira`;
                 })()}
               </JiraLink>}
+            </div>
+            <div className="ci-problem">
+              {problems[group.id]
+                ? <Notice kind="success">
+                  Problem <JiraLink href={problems[group.id].url}>{problems[group.id].key}</JiraLink> created{problems[group.id].linked ? `, linked to ${problems[group.id].linked} tickets` : ''}.
+                  {problems[group.id].linkError && <> {problems[group.id].linkError}</>}
+                </Notice>
+                : problemForm?.groupId === group.id
+                  ? <div className="ci-problem__form">
+                    <div className="ci-problem__fields">
+                      <Field label="Project key" htmlFor={`ci-prb-project-${index}`}>
+                        <input id={`ci-prb-project-${index}`} className="nq-input" maxLength={50} value={problemForm.projectKey} placeholder="e.g. PRB"
+                          onChange={(e) => setProblemForm((f) => ({ ...f, projectKey: e.target.value.toUpperCase() }))} />
+                      </Field>
+                      <Field label="Issue type" htmlFor={`ci-prb-type-${index}`}>
+                        <input id={`ci-prb-type-${index}`} className="nq-input" maxLength={60} value={problemForm.issueTypeName}
+                          onChange={(e) => setProblemForm((f) => ({ ...f, issueTypeName: e.target.value }))} />
+                      </Field>
+                      <Field label="Summary" htmlFor={`ci-prb-summary-${index}`}>
+                        <input id={`ci-prb-summary-${index}`} className="nq-input" maxLength={250} value={problemForm.summary}
+                          onChange={(e) => setProblemForm((f) => ({ ...f, summary: e.target.value }))} />
+                      </Field>
+                    </div>
+                    <label className="ci-check">
+                      <input type="checkbox" className="nq-check" checked={problemForm.link} onChange={(e) => setProblemForm((f) => ({ ...f, link: e.target.checked }))} />
+                      <span>Link the {Math.min(20, (group.keys || []).length)} newest example tickets to the problem</span>
+                    </label>
+                    {problemForm.error && <Notice kind="error">{problemForm.error}</Notice>}
+                    <div className="nq-inline">
+                      <Button small appearance="primary" disabled={creatingProblem || !problemForm.projectKey.trim() || !problemForm.summary.trim()} onClick={() => createProblem(group, index)}>
+                        {creatingProblem ? 'Creating…' : 'Create problem'}
+                      </Button>
+                      <Button small appearance="subtle" disabled={creatingProblem} onClick={() => setProblemForm(null)}>Cancel</Button>
+                    </div>
+                  </div>
+                  : <Button small onClick={() => openProblemForm(group, index)}>Create problem</Button>}
             </div>
             <div className="nq-table-wrap">
               <table className="nq-table">
