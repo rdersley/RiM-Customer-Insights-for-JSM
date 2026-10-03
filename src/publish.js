@@ -5,6 +5,8 @@
 // trends and breakdowns (`detailed`) are only taken from the app's own
 // analysis of that organisation (liveJobs.js), never from a page.
 
+import { validTimeZone } from './timeOfDay.js';
+
 export const MAX_PATTERNS = 15;
 const MAX_POINTS = 60;
 const ORG_ID = /^\d{1,18}$/;
@@ -28,8 +30,14 @@ const hours = (value) => (Number.isFinite(Number(value)) && value !== null ? Mat
 const share = (value) => (Number.isFinite(Number(value)) && value !== null ? Math.min(100, Math.max(0, Math.round(Number(value)))) : null);
 const portalUrl = (value) => (/^https:\/\/[^\s"<>]+\/servicedesk\/customer\/portal\/\d+\/[A-Z][A-Z0-9_]*-\d+$/.test(String(value)) ? String(value) : '');
 
+const hourCounts = (value) => (Array.isArray(value) && value.length === 24 ? value.map(count) : null);
+const timeOfDayOf = (value) => (Array.isArray(value?.grid) && value.grid.length === 7 && value.grid.every((row) => Array.isArray(row) && row.length === 24)
+  ? { timeZone: validTimeZone(value.timeZone), grid: value.grid.map((row) => row.map(count)), estimated: Boolean(value.estimated) }
+  : null);
+
 function patternDetails(p) {
   return {
+    hours: hourCounts(p?.hours),
     trend: Array.isArray(p?.trend)
       ? p.trend.filter((t) => ISO_DATE.test(String(t?.date))).slice(0, MAX_POINTS).map((t) => ({ date: String(t.date), count: count(t.count), days: Math.max(1, count(t.days) || 1) }))
       : null,
@@ -78,6 +86,7 @@ export function snapshotFrom(input, { now = new Date(), detailed = false } = {})
     detailed: true,
     resolution: input?.resolution ? { medianHours: hours(input.resolution.medianHours), openShare: share(input.resolution.openShare) } : null,
     breakdowns: breakdownsOf(input?.breakdowns),
+    timeOfDay: timeOfDayOf(input?.timeOfDay),
   } : {};
   const current = count(input?.totals?.current);
   const previous = count(input?.totals?.previous);

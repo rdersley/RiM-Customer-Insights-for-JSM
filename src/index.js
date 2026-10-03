@@ -209,6 +209,7 @@ define('publishReport', async ({ payload, context }) => {
   const snapshot = snapshotFrom({ ...payload.snapshot, organization });
   const config = liveConfigFrom({
     ...payload?.live,
+    timeZone: payload?.timeZone,
     period: snapshot.period,
     approved: snapshot.patterns.filter((p) => p.title !== 'Other requests'),
     overview: snapshot.overview,

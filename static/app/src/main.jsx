@@ -229,6 +229,7 @@ function App() {
           actions: draft.actions.split('\n'),
         },
         live: draft.live,
+        timeZone: LOCAL_ZONE,
         projects: lastQuery?.projects || [],
       });
       setPublication((p) => ({ ...p, published, liveState: published.live ? { ...p?.liveState, queuedAt: new Date().toISOString() } : {} })); setDraft(null);

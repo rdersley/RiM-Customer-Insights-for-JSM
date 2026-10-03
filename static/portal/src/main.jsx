@@ -9,6 +9,7 @@ import '@retailinmotion/ui/css';
 import { enableTheme } from '@retailinmotion/ui/theme';
 import { Button, Card, EmptyState, Kpi, Loading, Lozenge, Notice } from '@retailinmotion/ui/react';
 import { duration, sparkPath, trendWord } from '../../../src/trend.js';
+import { DAYS, hoursOf, peakWindow, windowText } from '../../../src/timeOfDay.js';
 import './styles.css';
 
 enableTheme(view);
@@ -58,10 +59,42 @@ function Chart({ points }) {
   </div>;
 }
 
+/** Day-of-week × hour heatmap of when requests were raised. */
+function TimeHeatmap({ grid }) {
+  const max = Math.max(1, ...grid.flat());
+  return <div className="cp-heat" role="img" aria-label="Requests by day of week and hour of day">
+    <span />
+    {Array.from({ length: 24 }, (_, h) => <span key={h} className="cp-heat__hour">{h % 3 === 0 ? String(h).padStart(2, '0') : ''}</span>)}
+    {grid.map((row, d) => <React.Fragment key={DAYS[d]}>
+      <span className="cp-heat__day">{DAYS[d]}</span>
+      {row.map((n, h) => <span key={h} className="cp-heat__cell" title={`${DAYS[d]} ${String(h).padStart(2, '0')}:00`}>
+        {n > 0 && <i style={{ opacity: 0.15 + 0.85 * (n / max) }} />}
+      </span>)}
+    </React.Fragment>)}
+  </div>;
+}
+
+function WhenRequestsArrive({ timeOfDay }) {
+  const { grid, timeZone } = timeOfDay;
+  const total = grid.flat().reduce((a, n) => a + n, 0);
+  if (!total) return null;
+  const peak = peakWindow(hoursOf(grid));
+  const dayTotals = grid.map((row) => row.reduce((a, n) => a + n, 0));
+  const busiest = dayTotals.indexOf(Math.max(...dayTotals));
+  return <Card title="When your requests arrive" description={`Times in ${timeZone}.`}>
+    <div className="nq-kpis cp-when">
+      {peak && <Kpi icon="◷" label="Busiest hours" value={windowText(peak)} hint={`${peak.share}% of requests`} />}
+      <Kpi icon="▦" label="Busiest day" value={DAYS[busiest]} hint={`${Math.round((dayTotals[busiest] / total) * 100)}% of requests`} />
+    </div>
+    <TimeHeatmap grid={grid} />
+  </Card>;
+}
+
 function Issue({ pattern }) {
   const word = trendWord(pattern.trend);
   const resolution = resolutionText(pattern);
-  const hasDetail = word || resolution || pattern.examples?.length;
+  const peak = peakWindow(pattern.hours);
+  const hasDetail = word || resolution || peak || pattern.examples?.length;
   const head = <>
     <span className="cp-issue__title">
       <strong>{pattern.title}</strong>
@@ -76,7 +109,7 @@ function Issue({ pattern }) {
     <details>
       <summary className="cp-issue__row">{head}<span className="cp-issue__chevron" aria-hidden="true">›</span></summary>
       <div className="cp-issue__detail">
-        {(word || resolution) && <p className="nq-muted">{[word && `${word} through the period`, resolution].filter(Boolean).join(' · ')}</p>}
+        {(word || resolution || peak) && <p className="nq-muted">{[word && `${word} through the period`, peak && `mostly ${windowText(peak)} (${peak.share}%)`, resolution].filter(Boolean).join(' · ')}</p>}
         {pattern.examples?.length > 0 && <>
           <p className="cp-label">Recent requests</p>
           <ul className="cp-examples">{pattern.examples.map((t) => <li key={t.key}>
@@ -125,6 +158,7 @@ function Report({ report, onRefresh, refreshNote }) {
     {report.patterns.length > 0 && <Card title="Most common issues" description={report.detailed ? 'Open an issue to see how it’s trending and recent requests.' : undefined}>
       <ol className="cp-issues">{report.patterns.map((p) => <Issue key={p.title} pattern={p} />)}</ol>
     </Card>}
+    {report.timeOfDay && <WhenRequestsArrive timeOfDay={report.timeOfDay} />}
     {report.breakdowns?.length > 0 && <div className="nq-grid cp-breakdowns">{report.breakdowns.map((b) => {
       const top = Math.max(1, ...b.values.map((v) => v.count));
       return <Card key={b.label} title={`By ${b.label}`}>
