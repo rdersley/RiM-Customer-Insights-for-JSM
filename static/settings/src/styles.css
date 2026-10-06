@@ -1,0 +1,12 @@
+/* Settings page: layout only, tokens only. */
+.nq-page > * + * { margin-top: var(--nq-space-200); }
+.cs-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto auto; gap: var(--nq-space-150); align-items: end; }
+.cs-row .nq-field { margin: 0; }
+.cs-row--pair { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+.cs-number { max-width: 120px; }
+.cs-check { display: flex; align-items: center; gap: var(--nq-space-100); color: var(--nq-text); }
+.cs-orgs { max-height: 220px; overflow-y: auto; display: grid; gap: var(--nq-space-075, 6px); padding: var(--nq-space-100); border: 1px solid var(--nq-border); border-radius: var(--nq-radius-sm); }
+@media (max-width: 700px) {
+  .cs-row, .cs-row--pair { grid-template-columns: minmax(0, 1fr); }
+}
+.cs-portal { white-space: nowrap; padding-bottom: var(--nq-space-075, 6px); }

@@ -1,0 +1,74 @@
+name: Deploy Customer Insights to Sandbox
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: customer-insights-sandbox-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      FORGE_EMAIL: ${{ secrets.FORGE_EMAIL }}
+      FORGE_API_TOKEN: ${{ secrets.FORGE_API_TOKEN }}
+      DEPLOY_SITE: retailinmotion-sandbox1.atlassian.net
+      DEPLOY_PRODUCT: jira
+      DEPLOY_ENVIRONMENT: development
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Check Forge setup
+        shell: bash
+        run: |
+          test -n "$FORGE_EMAIL" || (echo "Missing FORGE_EMAIL repository secret" && exit 1)
+          test -n "$FORGE_API_TOKEN" || (echo "Missing FORGE_API_TOKEN repository secret" && exit 1)
+          if grep -q 'REPLACE_WITH_FORGE_APP_ID' manifest.yml; then
+            echo "This app is not registered. Run forge register in the Retail inMotion Developer Space and commit the generated app ID in manifest.yml."
+            exit 1
+          fi
+      - name: Install app dependencies and Forge CLI
+        shell: bash
+        run: |
+          npm ci
+          npm install --global @forge/cli
+          forge settings set usage-analytics false
+          forge settings set default-environment development
+      - name: Run tests
+        run: npm test
+      - name: Build Custom UI
+        run: npm run build
+      - name: Check Forge manifest
+        shell: bash
+        run: |
+          set +e
+          forge lint --environment "$DEPLOY_ENVIRONMENT" 2>&1 | tee forge-lint.log
+          lint_status=${PIPESTATUS[0]}
+          set -e
+          if [ "$lint_status" -eq 0 ]; then exit 0; fi
+          if grep -q "MAJOR_VERSION_RULE" forge-lint.log && grep -Eq "0 errors?, 0 warnings?, 1 approval" forge-lint.log; then
+            echo "Accepting the expected major-version approval gate during deployment."
+            exit 0
+          fi
+          exit "$lint_status"
+      - name: Deploy to Forge development
+        run: forge deploy --environment "$DEPLOY_ENVIRONMENT" --non-interactive --approve MAJOR_VERSION_RULE
+      - name: Upgrade or first-install on sandbox
+        shell: bash
+        run: |
+          set +e
+          forge install --upgrade --site "$DEPLOY_SITE" --product "$DEPLOY_PRODUCT" --environment "$DEPLOY_ENVIRONMENT" --confirm-scopes --non-interactive 2>&1 | tee forge-install.log
+          install_status=${PIPESTATUS[0]}
+          set -e
+          if [ "$install_status" -eq 0 ]; then exit 0; fi
+          if grep -q "Could not find an installation for the provided Atlassian app" forge-install.log; then
+            forge install --site "$DEPLOY_SITE" --product "$DEPLOY_PRODUCT" --environment "$DEPLOY_ENVIRONMENT" --confirm-scopes --non-interactive
+            exit 0
+          fi
+          exit "$install_status"

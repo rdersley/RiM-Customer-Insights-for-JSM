@@ -1,0 +1,87 @@
+modules:
+  jira:globalPage:
+    - key: retailinmotion-customer-insights
+      resource: main
+      resolver:
+        function: resolver
+      title: Customer Insights
+  # Settings. Jira admins only; checked again on the server. Two entries for
+  # one page: a useAsConfig page only appears behind "Configure" (now in
+  # Administration > Connected apps), so a plain entry also lists it in the
+  # Jira settings > Apps sidebar like other apps.
+  jira:adminPage:
+    - key: customer-insights-settings
+      title: Customer Insights
+      resource: settings
+      resolver:
+        function: resolver
+      useAsConfig: true
+    - key: customer-insights-settings-menu
+      title: Customer Insights
+      resource: settings
+      resolver:
+        function: resolver
+      layout: blank
+  # Published reports for portal customers. Own function (src/portal.js) so
+  # customers can't reach the agent resolvers.
+  jiraServiceManagement:portalUserMenuAction:
+    - key: customer-insights-portal-report
+      title: Service report
+      resource: portal
+      resolver:
+        function: portal-resolver
+      viewportSize: large
+      unlicensedAccess:
+        - customer
+  # Live portal reports (src/liveJobs.js): an hourly check queues the reports
+  # that are due; the consumer refreshes one organisation per event.
+  scheduledTrigger:
+    - key: live-reports-hourly
+      function: live-scheduler
+      interval: hour
+  consumer:
+    - key: live-report-consumer
+      queue: live-report-refresh
+      function: live-refresh
+  function:
+    - key: resolver
+      handler: index.handler
+    - key: portal-resolver
+      handler: portal.handler
+    - key: live-scheduler
+      handler: liveJobs.scheduler
+      timeoutSeconds: 120
+    - key: live-refresh
+      handler: liveJobs.consumer
+      timeoutSeconds: 900
+  # Atlassian-hosted Claude for the opt-in AI summary (src/ai.js).
+  llm:
+    - key: insights-llm
+      model:
+        - claude
+resources:
+  - key: main
+    path: static/app/build
+  - key: portal
+    path: static/portal/build
+  - key: settings
+    path: static/settings/build
+app:
+  runtime:
+    name: nodejs22.x
+  # Retail inMotion has its own Forge app. Replace with the id printed by:
+  #   forge register "Retail inMotion Customer Insights for JSM"
+  id: ari:cloud:ecosystem::app/REPLACE-WITH-RETAIL-INMOTION-APP-ID
+permissions:
+  scopes:
+    - read:jira-work
+    # Spike alert tickets (src/alerts.js), only when an admin switches them on
+    - write:jira-work
+    - read:servicedesk-request
+    # GET /rest/servicedeskapi/organization (organisation picker)
+    - read:organization:jira-service-management
+    # Published portal reports (src/storage.js)
+    - storage:app
+  content:
+    styles:
+      - unsafe-inline

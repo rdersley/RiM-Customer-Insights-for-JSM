@@ -1,0 +1,64 @@
+/* Portal service report: layout only, tokens only. */
+.nq-page > * + * { margin-top: var(--nq-space-200); }
+.nq-stack + .nq-stack { margin-top: var(--nq-space-400); padding-top: var(--nq-space-300); border-top: 1px solid var(--nq-border); }
+.cp-title { align-items: flex-end; flex-wrap: wrap; }
+.cp-title p { margin: 2px 0 0; }
+.cp-updated { display: flex; align-items: center; gap: var(--nq-space-100); flex-wrap: wrap; }
+.cp-text { margin: 0; color: var(--nq-text); line-height: var(--nq-line-height); }
+
+.cp-issues { list-style: none; margin: 0; padding: 0; }
+.cp-issues li { display: flex; align-items: center; gap: var(--nq-space-150); padding: var(--nq-space-100) 0; border-bottom: 1px solid var(--nq-border); }
+.cp-issues li:last-child { border-bottom: 0; }
+.cp-issues li > div { flex: 1; min-width: 0; }
+.cp-issues p { margin: 2px 0 0; }
+.cp-issues__count { font-weight: 700; color: var(--nq-text); min-width: 48px; text-align: right; }
+
+.cp-actions { margin: 0; padding-left: var(--nq-space-250); color: var(--nq-text); }
+.cp-actions li + li { margin-top: var(--nq-space-050); }
+
+/* Issue rows with trend, and their detail */
+.cp-issue { border-bottom: 1px solid var(--nq-border); }
+.cp-issue:last-child { border-bottom: 0; }
+.cp-issues li.cp-issue { display: block; padding: 0; }
+.cp-issue__row { display: grid; grid-template-columns: minmax(0, 1fr) 72px 56px 64px 12px; gap: var(--nq-space-150); align-items: center; padding: var(--nq-space-100) var(--nq-space-050); list-style: none; }
+summary.cp-issue__row { cursor: pointer; }
+summary.cp-issue__row::-webkit-details-marker { display: none; }
+summary.cp-issue__row:hover { background: var(--nq-surface-hovered); }
+.cp-issue details[open] summary { background: var(--nq-surface-sunken); }
+.cp-issue__title { display: grid; gap: 2px; min-width: 0; color: var(--nq-text); }
+.cp-issue__chevron { color: var(--nq-icon-subtle); transition: transform 0.12s ease; }
+.cp-issue details[open] .cp-issue__chevron { transform: rotate(90deg); }
+.cp-issue__detail { padding: var(--nq-space-100) var(--nq-space-050) var(--nq-space-150); display: grid; gap: var(--nq-space-075, 6px); }
+.cp-issue__detail p { margin: 0; }
+.cp-label { font-weight: 600; color: var(--nq-text); }
+.cp-spark { display: block; overflow: visible; }
+.cp-spark path { fill: none; stroke: var(--nq-text-brand); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+
+.cp-examples { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.cp-examples li { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: var(--nq-space-100); align-items: baseline; }
+.cp-examples__summary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--nq-text); }
+.cp-key { font-weight: 600; color: var(--nq-link); text-decoration: none; }
+a.cp-key:hover { text-decoration: underline; }
+
+/* Requests over time */
+.cp-chart { display: flex; gap: var(--nq-space-050); height: 140px; border-bottom: 1px solid var(--nq-border); }
+.cp-chart__slot { flex: 1; min-width: 6px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; }
+.cp-chart__bar { width: min(62%, 18px); min-height: 3px; background: var(--nq-bg-brand); border-radius: var(--nq-radius-sm) var(--nq-radius-sm) 0 0; }
+.cp-chart__slot > span { height: 18px; padding-top: 4px; font-size: var(--nq-font-size-xs); color: var(--nq-text-subtlest); white-space: nowrap; }
+
+/* Breakdowns */
+.cp-breakdowns { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.cp-values { list-style: none; margin: 0; padding: 0; }
+.cp-values li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(48px, 1fr) 56px; gap: var(--nq-space-100); align-items: center; padding: var(--nq-space-075, 6px) 0; border-bottom: 1px solid var(--nq-border); }
+.cp-values li:last-child { border-bottom: 0; }
+.cp-values__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--nq-text); }
+.cp-meter { height: 6px; background: var(--nq-bg-neutral); border-radius: var(--nq-radius-sm); overflow: hidden; }
+.cp-meter i { display: block; height: 100%; background: var(--nq-bg-brand); }
+.cp-note { font-size: var(--nq-font-size-xs); }
+
+@media (max-width: 640px) {
+  .cp-issue__row { grid-template-columns: minmax(0, 1fr) 48px 56px 12px; }
+  .cp-spark { display: none; }
+  .cp-examples li { grid-template-columns: 88px minmax(0, 1fr); }
+  .cp-examples li > span:last-child { display: none; }
+}

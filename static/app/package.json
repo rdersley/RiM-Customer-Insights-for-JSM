@@ -1,0 +1,6 @@
+{
+  "name": "customer-insights-ui",
+  "private": true,
+  "type": "module",
+  "scripts": { "build": "vite build" }
+}
