@@ -2,7 +2,7 @@
 
 > **Retail inMotion edition.** Internal app for the Retail inMotion work site (`retailinmotion.atlassian.net`) and sandbox (`retailinmotion-sandbox1.atlassian.net`). It is a separate repository and Forge app from the Marketplace edition and is not published to the Atlassian Marketplace.
 >
-> Before the first deploy: run `forge register "Retail inMotion Customer Insights for JSM"`, put the printed id in `manifest.yml` (`app.id`), and add the `FORGE_EMAIL` / `FORGE_API_TOKEN` secrets. Merges deploy to the sandbox as before; the work site is deployed only by the manual **Deploy to Retail inMotion work site** workflow. The **Brand check** workflow fails if the Marketplace brand appears anywhere in the repository.
+> Before the first deploy: add the `FORGE_EMAIL` / `FORGE_API_TOKEN` secrets, then run the **Register Forge app** workflow (Actions tab), which registers this app with Forge and commits its id to `manifest.yml`. Merges deploy to the sandbox as before; the work site is deployed only by the manual **Deploy to Retail inMotion work site** workflow. The **Brand check** workflow fails if the Marketplace brand appears anywhere in the repository.
 
 A Forge app that finds the recurring issues behind a customer organisation's tickets, shows what's changing, and can share a reviewed report with that customer in the portal.
 
@@ -41,7 +41,7 @@ Stored in Forge storage: settings, published portal reports (counts, trends, the
 
 ## Release
 
-There is one production build: `main`, with Marketplace licensing on. Sites installed outside the Marketplace (evaluation and internal sites) are allowed by cloud id in the `EVALUATION_CLOUD_IDS` production variable. Anything that differs between sites is a setting, never a Forge variable, because variables apply to every site installed from an environment.
+This is the internal edition: no Marketplace listing and no licence check (`src/license.js` allows every installation). Merges to `main` are tested; **Deploy Customer Insights to Sandbox** deploys the Forge `development` environment to `retailinmotion-sandbox1.atlassian.net`, and **Deploy to Retail inMotion work site** deploys the `work-site` environment to `retailinmotion.atlassian.net`. Anything that differs between the two sites is a setting, never a Forge variable. Moving the sites over from the Marketplace app is covered in `docs/WORK_SITE_ROLLOUT.md`.
 
 ## Project layout
 
