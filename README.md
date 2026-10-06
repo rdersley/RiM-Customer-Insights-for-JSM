@@ -41,7 +41,7 @@ Stored in Forge storage: settings, published portal reports (counts, trends, the
 
 ## Release
 
-This is the internal edition: no Marketplace listing and no licence check (`src/license.js` allows every installation). Merges to `main` are tested; **Deploy Customer Insights to Sandbox** deploys the Forge `development` environment to `retailinmotion-sandbox1.atlassian.net`, and **Deploy to Retail inMotion work site** deploys the `work-site` environment to `retailinmotion.atlassian.net`. Anything that differs between the two sites is a setting, never a Forge variable. Moving the sites over from the Marketplace app is covered in `docs/WORK_SITE_ROLLOUT.md`.
+This is the internal edition: no Marketplace listing and no licence check (`src/license.js` allows every installation). Merges to `main` are tested; **Deploy Customer Insights to Sandbox** deploys the Forge `development` environment to `retailinmotion-sandbox1.atlassian.net`, and **Deploy to Retail inMotion work site** deploys the Forge `production` environment to `retailinmotion.atlassian.net`. Anything that differs between the two sites is a setting, never a Forge variable. Moving the sites over from the Marketplace app is covered in `docs/WORK_SITE_ROLLOUT.md`.
 
 ## Project layout
 

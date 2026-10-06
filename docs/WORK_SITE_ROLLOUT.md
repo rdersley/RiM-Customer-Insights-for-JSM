@@ -25,7 +25,7 @@ Customer Insights from the Marketplace app, so each site moves over once.
 ## Work site (retailinmotion.atlassian.net)
 
 Same steps, using Actions → **Deploy to Retail inMotion work site** (type `DEPLOY`). It deploys the
-Forge `work-site` environment, so merges to `main` never reach the work site on their own.
+Forge `production` environment, so merges to `main` never reach the work site on their own.
 
 ## What carries over
 
