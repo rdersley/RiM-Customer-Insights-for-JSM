@@ -9,6 +9,7 @@ import { enableTheme } from '@retailinmotion/ui/theme';
 import { ActionBar, AppHeader, Button, Card, Field, Footer, Loading, Notice } from '@retailinmotion/ui/react';
 import { version } from '../../../package.json';
 import { ALERT_LIMITS, DEFAULT_ALERTS, DEFAULT_PLACEHOLDERS, MAX_BREAKDOWNS, MAX_PLACEHOLDERS, MAX_WATCHED, MIN_PATTERN } from '../../../src/settings.js';
+import BackupRestore from './BackupRestore.jsx';
 import './styles.css';
 
 enableTheme(view);
@@ -190,6 +191,8 @@ function App() {
         <Button appearance="subtle" disabled={!dirty || saving} onClick={() => { setDraft(state.settings); setSaved(false); }}>Discard</Button>
         <Button appearance="primary" disabled={!dirty || saving} onClick={save}>Save</Button>
       </ActionBar>
+
+      <BackupRestore invoke={invoke} app="Customer Insights" filePrefix="retailinmotion-customer-insights" />
     </>}
     <Footer product={PRODUCT} version={version} />
   </div>;

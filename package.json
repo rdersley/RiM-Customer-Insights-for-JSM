@@ -7,8 +7,8 @@
   "scripts": {
     "build": "npm run build:ui",
     "build:ui": "vite build --config static/app/vite.config.js && vite build --config static/portal/vite.config.js && vite build --config static/settings/vite.config.js",
-    "test": "node --test && npm run check:ui",
-    "lint": "node --check src/index.js && node --check src/analysis.js && node --check src/portal.js && node --check src/publish.js && node --check src/settings.js && node --check src/engine.js && node --check src/live.js && node --check src/liveJobs.js && node --check src/alerts.js && node --check src/storage.js && node --check src/timeOfDay.js",
+    "test": "node --test --experimental-test-module-mocks && npm run check:ui",
+    "lint": "node --check src/index.js && node --check src/analysis.js && node --check src/portal.js && node --check src/publish.js && node --check src/settings.js && node --check src/engine.js && node --check src/live.js && node --check src/liveJobs.js && node --check src/alerts.js && node --check src/storage.js && node --check src/timeOfDay.js && node --check src/backup.js",
     "check:ui": "retailinmotion-ui-check static/app/src static/portal/src static/settings/src"
   },
   "dependencies": {

@@ -3,6 +3,7 @@ import { asUser, route } from '@forge/api';
 import { textOf } from './analysis.js';
 import { filterFor, organisationsOf, parseQuery, readJson, runAnalysis, searchPage } from './engine.js';
 import { licenseAllows, UNLICENSED_MESSAGE } from './license.js';
+import { exportBackupPage, importBackupBatch } from './backup.js';
 import { suggestMerges, summarise } from './ai.js';
 import { snapshotFrom } from './publish.js';
 import { deleteLive, deleteReport, listAlerts, loadAlert, loadLiveConfig, loadLiveState, loadReport, loadSettings, saveAlert, saveLiveConfig, saveReport, saveSettings } from './storage.js';
@@ -287,6 +288,23 @@ define('saveSettings', async ({ payload, context }) => {
   const { alerts } = settings;
   console.log(`saveSettings: ${settings.breakdowns.length} breakdowns, portal ${settings.portalEnabled ? 'on' : 'off'}, alerts ${alerts.enabled ? `on (${alerts.organizations.length} orgs, tickets ${alerts.createIssue ? alerts.projectKey : 'off'})` : 'off'}`);
   return settings;
+});
+
+// ---- Backup & restore (settings page): Jira admins only ---------------------
+
+async function requireBackupAdmin(context) {
+  if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
+  if (!(await isJiraAdmin())) throw new Error('Only Jira admins can back up or restore Customer Insights.');
+}
+
+define('exportBackupPage', async ({ payload, context }) => {
+  await requireBackupAdmin(context);
+  return exportBackupPage(payload?.cursor || null);
+});
+
+define('importBackupBatch', async ({ payload, context }) => {
+  await requireBackupAdmin(context);
+  return importBackupBatch(payload?.items);
 });
 
 export const handler = resolver.getDefinitions();
