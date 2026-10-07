@@ -7,6 +7,7 @@ import { AppHeader, Button, Card, EmptyState, Field, Footer, Kpi, Loading, Lozen
 import { version } from '../../../package.json';
 import { localIso, matchPreset, presetRange, PRESETS } from '../../../src/dates.js';
 import { analyseEveryTicket, Cancelled, FULL_LIMIT } from './fullAnalysis.js';
+import { exportPdf } from './exportPdf.js';
 import { applyMerges, median, patternTrend, topShares } from '../../../src/analysis.js';
 import { jqlClause, jqlEmptyClause } from '../../../src/settings.js';
 import { changeText } from '../../../src/alertText.js';
@@ -98,6 +99,7 @@ function App() {
   const [siteUrl, setSiteUrl] = useState('');
   const [alerts, setAlerts] = useState([]);
   const [pendingRun, setPendingRun] = useState(null);
+  const [pdfBusy, setPdfBusy] = useState(false);
 
   useEffect(() => {
     view.getContext().then((context) => setSiteUrl(String(context?.siteUrl || '').replace(/\/$/, ''))).catch(() => {});
@@ -304,6 +306,17 @@ function App() {
     link.click(); URL.revokeObjectURL(link.href);
   }
 
+  // The report as shown, AI names and summary included.
+  async function downloadPdf() {
+    if (!report) return;
+    setPdfBusy(true);
+    try {
+      await exportPdf({ report, groups, ai, filter: report.filter, product: PRODUCT, version });
+    } catch (e) {
+      setError(`The PDF couldn’t be created: ${e.message || 'unknown error'}`);
+    } finally { setPdfBusy(false); }
+  }
+
   // "Open in Jira" links. The site address comes from Forge's context: ticket
   // links from the API point at api.atlassian.com, not the Jira site.
   const jiraOrigin = siteUrl;
@@ -332,7 +345,10 @@ function App() {
       product={PRODUCT}
       subtitle="See recurring issues and what’s changing across a customer’s tickets."
       version={version}
-      actions={report && <Button onClick={exportCsv}>Export CSV</Button>}
+      actions={report && <>
+        <Button onClick={downloadPdf} disabled={pdfBusy}>{pdfBusy ? 'Creating PDF…' : 'Export PDF'}</Button>
+        <Button onClick={exportCsv}>Export CSV</Button>
+      </>}
     />
 
     {!licensed && <Notice kind="warning" title="Customer Insights isn’t licensed on this site">
