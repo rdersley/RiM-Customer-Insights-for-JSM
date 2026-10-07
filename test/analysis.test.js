@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildDataQuality, buildReport, chartBuckets, groupIssues, median, mergeGroups, patternTrend, tokenize, topShares } from '../src/analysis.js';
+import { buildDataQuality, buildReport, chartBuckets, groupIssues, median, mergeGroups, patternTrend, synonymReplacer, tokenize, topShares } from '../src/analysis.js';
 
 function issue(key, summary, created, description = '') {
   return {
@@ -289,4 +289,32 @@ test('trend words compare tickets per day in each half of the period', async () 
   assert.equal(duration(5.55), '5.6 h');
   assert.equal(duration(50), '2.1 days');
   assert.equal(duration(null), '–');
+});
+
+test('same-meaning words group together under the first word', () => {
+  const synonyms = [['pinpad', 'pin pad', 'bluepad', 'card reader'], ['sync', 'synchronization']];
+  const issues = [
+    issue('SD-1', 'RYR - MAN - RENNTO - Bluepad Connection', '2026-09-10T10:00:00Z'),
+    issue('SD-2', 'RYR - CHIRDI - GRO - Pinpad connection', '2026-09-11T10:00:00Z'),
+    issue('SD-3', 'RYR - BGY - ABC - pin-pad connection lost', '2026-09-12T10:00:00Z'),
+    issue('SD-4', 'RYR - NRN - GOGPEL - sync issues', '2026-09-12T10:00:00Z'),
+    issue('SD-5', 'RYR - AGP - CERESA - Synchronization Vpos', '2026-09-13T10:00:00Z'),
+  ];
+  // Without the lists, bluepad and pinpad tickets stay apart.
+  assert.equal(groupIssues(issues).some((g) => g.count === 3), false);
+  const groups = groupIssues(issues, 0.4, synonyms);
+  const pinpad = groups.find((g) => g.tickets.some((t) => t.key === 'SD-1'));
+  assert.deepEqual(pinpad.keys.sort(), ['SD-1', 'SD-2', 'SD-3']);
+  assert.match(pinpad.theme, /^Pinpad connection/);
+  assert.deepEqual(groups.find((g) => g.keys.includes('SD-4')).keys.sort(), ['SD-4', 'SD-5']);
+  const report = buildReport(issues, '2026-09-08', '2026-09-14', null, { synonyms });
+  assert.deepEqual(report.synonyms, synonyms);
+  assert.equal(report.groups.find((g) => g.keys.includes('SD-1')).count, 3);
+});
+
+test('same-meaning replacement respects word edges and plurals', () => {
+  const same = synonymReplacer([['pinpad', 'bluepad', 'card reader']]);
+  assert.equal(same('Card Readers broken').trim(), 'pinpad  broken'.trim());
+  assert.equal(same('bluepadx and rebluepad'), 'bluepadx and rebluepad');
+  assert.equal(synonymReplacer([])('Bluepad'), 'Bluepad');
 });

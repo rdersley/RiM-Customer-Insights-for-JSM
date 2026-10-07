@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { aiInput, parseAssignments, parseInsights, parseMerges, suggestMerges, summarise } from '../src/ai.js';
+import { aiInput, assignToApproved, parseAssignments, parseInsights, parseMerges, suggestMerges, summarise } from '../src/ai.js';
 import { applyMerges } from '../src/analysis.js';
 
 const report = {
@@ -124,7 +124,19 @@ test('suggestMerges forces the merge tool and sends bounded examples', async () 
   const result = await suggestMerges({ groups: barsetGroups }, { chatFn, models: ['claude-sonnet-5'] });
   assert.equal(prompt.tool_choice.function.name, 'merge_groups');
   assert.deepEqual(result.merges, [{ title: 'Open a barset', members: [0, 1, 6] }]);
-  assert.equal(JSON.parse(prompt.messages[1].content.split('\n').slice(1).join('\n')).length, 8);
+  assert.equal(JSON.parse(prompt.messages[1].content.split('Ticket groups as JSON:\n')[1]).length, 8);
+});
+
+test('merge and assign prompts carry the site\'s same-meaning words', async () => {
+  const prompts = [];
+  const chatFn = async (p) => { prompts.push(p); return { choices: [{ message: { tool_calls: [{ function: { name: p.tool_choice.function.name, arguments: { issues: [], assignments: [] } } }] } }] }; };
+  const synonyms = [['pinpad', 'bluepad', 'pin pad'], ['only one']];
+  await suggestMerges({ groups: barsetGroups, synonyms }, { chatFn, models: ['claude-sonnet-5'] });
+  await assignToApproved({ groups: barsetGroups, synonyms }, [{ title: 'Pinpad connection' }], { chatFn, models: ['claude-sonnet-5'] });
+  for (const p of prompts) {
+    assert.deepEqual(JSON.parse(p.messages[1].content.split('\n')[1]), [['pinpad', 'bluepad', 'pin pad']]);
+    assert.match(p.messages[0].content, /sameMeaning/);
+  }
 });
 
 test('pattern numbers sent as text are accepted', () => {

@@ -123,7 +123,7 @@ export async function checkOrganisation(orgId, store, now = Date.now()) {
   try {
     const window = alertWindow(asOf(now));
     const query = parseQuery({ organization, startDate: window.from, endDate: window.to });
-    const report = await runAnalysis(query, { breakdowns: settings.breakdowns, minPatternSize: settings.minPatternSize, placeholders: settings.placeholders, mode: 'app', budgetMs: 240000 });
+    const report = await runAnalysis(query, { breakdowns: settings.breakdowns, minPatternSize: settings.minPatternSize, placeholders: settings.placeholders, synonyms: settings.synonyms, mode: 'app', budgetMs: 240000 });
     const spikes = findSpikes(report, config, state.seen, now);
     const siteUrl = spikes.length && config.createIssue ? await siteUrlOf() : '';
     const seen = Object.fromEntries(Object.entries(state.seen || {}).filter(([, at]) => now - Date.parse(at) < QUIET_DAYS * DAY));

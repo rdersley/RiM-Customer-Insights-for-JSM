@@ -39,6 +39,27 @@ export function problemText(summary) {
   return segments[last];
 }
 
+const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Same-meaning word lists ([["pinpad", "bluepad", "pin pad"], …]) as one
+ * replacer: every word in a list, in any case, with spaces or hyphens between
+ * its parts and an optional plural, becomes the list's first word.
+ */
+export function synonymReplacer(lists = []) {
+  const canonical = new Map();
+  for (const list of Array.isArray(lists) ? lists : []) {
+    const words = (Array.isArray(list) ? list : []).map((w) => String(w ?? '').toLowerCase().replace(/\s+/g, ' ').trim()).filter(Boolean);
+    for (const w of words.slice(1)) if (!canonical.has(w)) canonical.set(w, words[0]);
+  }
+  if (!canonical.size) return (text) => text;
+  // Longest first, so "pin pad terminal" wins over "pin pad".
+  const variants = [...canonical.keys()].sort((a, b) => b.length - a.length);
+  const pattern = new RegExp(`(?<![a-z0-9])(${variants.map((v) => v.split(' ').map(escape).join('[\\s-]*')).join('|')})(?:e?s)?(?![a-z0-9])`, 'gi');
+  const target = (match) => canonical.get(match.toLowerCase().replace(/[\s-]+/g, ' ')) ?? canonical.get(match.toLowerCase().replace(/[\s-]+/g, ' ').replace(/e?s$/, ''));
+  return (text) => text.replace(pattern, (match, word) => ` ${target(word) ?? word} `);
+}
+
 function rawWords(text) {
   return text.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().match(/[a-z0-9]{3,}/g) || [];
 }
@@ -63,9 +84,9 @@ function terms(words) {
   return out;
 }
 
-export function tokenize(issue) {
+export function tokenize(issue, same = (text) => text) {
   const summary = issue.fields?.summary || issue.summary || '';
-  const words = rawWords(problemText(summary));
+  const words = rawWords(same(problemText(summary)));
   const surface = terms(words);
   // "pin pad" also yields "pinpad", so it matches tickets that spell it as one word.
   const compounds = new Map();
@@ -81,7 +102,7 @@ export function tokenize(issue) {
     summaryWords: [...surface.keys()],
     surface,
     compounds,
-    descriptionWords: [...terms(rawWords(textOf(issue.fields?.description ?? issue.description).join(' '))).keys()],
+    descriptionWords: [...terms(rawWords(same(textOf(issue.fields?.description ?? issue.description).join(' ')))).keys()],
   };
 }
 
@@ -188,8 +209,9 @@ function themeName(members, representative) {
  * Comparing with the whole cluster, not single tickets, stops one loose match
  * from chaining unrelated tickets together. Bounded for interactive use.
  */
-function cluster(issues, threshold, limit) {
-  const rows = issues.slice(0, limit).map((issue) => ({ issue, tokenized: tokenize(issue) }));
+function cluster(issues, threshold, limit, synonyms = []) {
+  const same = synonymReplacer(synonyms);
+  const rows = issues.slice(0, limit).map((issue) => ({ issue, tokenized: tokenize(issue, same) }));
   const df = vectorise(rows);
   rows.sort((a, b) => Date.parse(a.issue.fields.created) - Date.parse(b.issue.fields.created));
   const clusters = [];
@@ -255,8 +277,8 @@ function describe(found, shown = found.members) {
   };
 }
 
-export function groupIssues(issues, threshold = 0.4) {
-  return cluster(issues, threshold, 900)
+export function groupIssues(issues, threshold = 0.4, synonyms = []) {
+  return cluster(issues, threshold, 900, synonyms)
     .filter((found) => found.members.length > 1)
     .map((found) => describe(found))
     .sort((a, b) => b.count - a.count);
@@ -496,7 +518,7 @@ export function buildDataQuality(breakdowns, current, currentScale, placeholders
 /** Most tickets per period grouped in one Forge call (the browser passes Infinity). */
 export const PERIOD_LIMIT = 900;
 
-export function buildReport(issues, periodStart, periodEnd, totals = null, { limit = PERIOD_LIMIT, breakdowns = [], minPatternSize = 2, placeholders = [], timeZone: zone = 'UTC' } = {}) {
+export function buildReport(issues, periodStart, periodEnd, totals = null, { limit = PERIOD_LIMIT, breakdowns = [], minPatternSize = 2, placeholders = [], synonyms = [], timeZone: zone = 'UTC' } = {}) {
   const timeZone = validTimeZone(zone);
   const minimum = Math.max(2, Number(minPatternSize) || 2);
   const from = Date.parse(periodStart);
@@ -518,7 +540,7 @@ export function buildReport(issues, periodStart, periodEnd, totals = null, { lim
   // period and its trend compares like with like. Counts are scaled per period.
   const currentKeys = new Set(current.map((issue) => issue.key));
   const buckets = chartBuckets(periodStart, periodEnd);
-  const trends = cluster([...current.slice(0, limit), ...previous.slice(0, limit)], 0.4, Infinity)
+  const trends = cluster([...current.slice(0, limit), ...previous.slice(0, limit)], 0.4, Infinity, synonyms)
     .map((found) => {
       const now = found.members.filter((row) => currentKeys.has(row.issue.key));
       return { found, now, before: found.members.length - now.length };
@@ -559,6 +581,8 @@ export function buildReport(issues, periodStart, periodEnd, totals = null, { lim
     breakdowns: buildBreakdowns(breakdowns, current, previous, currentScale, previousScale),
     dataQuality: buildDataQuality(breakdowns, current, currentScale, placeholders),
     placeholders,
+    // Same-meaning words used for grouping, so "Analyse every ticket" and the AI use them too.
+    synonyms,
     resolution: resolutionOf(current),
     analyzedCount: Math.min(current.length, limit),
     sampled: currentScale > 1 || previousScale > 1,
