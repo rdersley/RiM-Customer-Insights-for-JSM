@@ -177,6 +177,7 @@ const MERGE_TOOL = {
 const MERGE_SYSTEM = `You tidy up ticket groups found by rule-based text matching for a service desk.
 Several groups can be the same customer request or problem written differently: typos ("breset"), plurals, rewording ("open barset" / "opening barset" / "barset needs unlocking"), or extra codes such as airports, crew IDs and dates.
 Combine groups when an agent would handle their tickets the same way. Check small groups (2-3 tickets) as well, and add one to a larger issue only when its examples clearly are that same request (for example "Unlock accounts" with "Account locked"). Never use a broad issue as a catch-all: a password reset is not account creation, and removing a flight is not a login problem.
+The same thing is often called different names: a brand or model name in one ticket and the generic name in another (for example "bluepad connection" and "pinpad connection" when both are the payment device). sameMeaning lists words this site treats as the same; groups that differ only by those words are the same issue.
 If a group's examples are unrelated to each other, or it matches nothing else, keep it as its own issue with its own clear name. Keep genuinely different problems apart even if they share words (for example "vPOS crash" and "vPOS won't charge").
 Give every issue a clear name a customer would understand; do not reuse codes or people's names as the name.
 Put every index in exactly one issue. Use only the data given. Call merge_groups once.`;
@@ -216,12 +217,19 @@ async function callTool(chatFn, models, messages, tool) {
   throw new Error(`AI request failed: ${lastError?.message || 'unknown error'}`);
 }
 
+/** The site's same-meaning word lists, bounded, for the merge and assign prompts. */
+export function sameMeaning(report) {
+  return (Array.isArray(report?.synonyms) ? report.synonyms : []).slice(0, 40)
+    .map((list) => (Array.isArray(list) ? list : []).slice(0, 20).map((w) => clip(w, 40)).filter(Boolean))
+    .filter((list) => list.length >= 2);
+}
+
 export async function suggestMerges(report, { chatFn = forgeChat, models = MODELS } = {}) {
   const input = mergeInput(report);
   if (input.length < 2) return { merges: [], model: null };
   const { raw, model } = await callTool(chatFn, models, [
     { role: 'system', content: MERGE_SYSTEM },
-    { role: 'user', content: `Ticket groups as JSON:\n${JSON.stringify(input)}` },
+    { role: 'user', content: `sameMeaning as JSON:\n${JSON.stringify(sameMeaning(report))}\n\nTicket groups as JSON:\n${JSON.stringify(input)}` },
   ], MERGE_TOOL);
   return { merges: parseMerges(raw, input.length), model };
 }
@@ -254,7 +262,7 @@ const ASSIGN_TOOL = {
 };
 
 const ASSIGN_SYSTEM = `You keep a customer's service report up to date. An agent approved a list of issues; new ticket groups have been found by rule-based text matching.
-Assign each group to the approved issue it clearly belongs to, allowing for typos, rewording and codes such as airports, crew IDs and dates. Use -1 when no approved issue clearly fits; never force a group into an issue.
+Assign each group to the approved issue it clearly belongs to, allowing for typos, rewording, different names for the same thing (sameMeaning lists words this site treats as the same) and codes such as airports, crew IDs and dates. Use -1 when no approved issue clearly fits; never force a group into an issue.
 Use only the data given. Call assign_groups once.`;
 
 /** Validated assignments, one per group index (default -1). */
@@ -276,7 +284,7 @@ export async function assignToApproved(report, approved, { chatFn = forgeChat, m
   if (!groups.length || !approved.length) return { assignments: (report.groups || []).map(() => -1), model: null };
   const { raw, model } = await callTool(chatFn, models, [
     { role: 'system', content: ASSIGN_SYSTEM },
-    { role: 'user', content: `Approved issues as JSON:\n${JSON.stringify(approved.map((a, i) => ({ issue: i, title: clip(a.title, 80), summary: clip(a.summary, 200) })))}\n\nTicket groups as JSON:\n${JSON.stringify(groups)}` },
+    { role: 'user', content: `sameMeaning as JSON:\n${JSON.stringify(sameMeaning(report))}\n\nApproved issues as JSON:\n${JSON.stringify(approved.map((a, i) => ({ issue: i, title: clip(a.title, 80), summary: clip(a.summary, 200) })))}\n\nTicket groups as JSON:\n${JSON.stringify(groups)}` },
   ], ASSIGN_TOOL);
   const assignments = parseAssignments(raw, groups.length, approved.length);
   // Groups beyond the ones sent stay unassigned.

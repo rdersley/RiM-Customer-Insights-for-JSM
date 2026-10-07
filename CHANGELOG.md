@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.0 (2026-10-07)
+
+- **Words that mean the same:** tickets that call the same thing by different names now group together, for example "Bluepad connection" and "Pinpad connection", or "sync" and "synchronisation". Admins edit the lists in settings (Patterns); the first word of each list names the pattern. Defaults cover payment devices (pinpad, bluepad, pin pad, card reader…), sync and log in. The AI merge and live report refreshes are given the same lists.
+
 ## 1.3.0 (2026-10-02)
 
 - **Several organisations at once:** analyse up to 10 organisations together. A By Organisation breakdown is added automatically, with drill-down and Open in Jira, and each issue shows its split by organisation. Portal reports stay one organisation each.

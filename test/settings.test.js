@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_PLACEHOLDERS, sanitizeAlerts, dimensionsOf, fieldKind, jqlClause, jqlEmptyClause, placeholderList, readValues, sanitizeSettings, selectableFields } from '../src/settings.js';
+import { DEFAULT_PLACEHOLDERS, DEFAULT_SYNONYMS, synonymList, sanitizeAlerts, dimensionsOf, fieldKind, jqlClause, jqlEmptyClause, placeholderList, readValues, sanitizeSettings, selectableFields } from '../src/settings.js';
 
 // Shapes as returned by GET /rest/api/3/field.
 const fields = [
@@ -135,4 +135,12 @@ test('an Organisation breakdown comes from the site field, limited to the select
   assert.deepEqual(dimensionsOf(issue, [b]), { customfield_10002: ['Ryanair Crew'] });
   assert.equal(jqlClause(b, 'Aer "Lingus"'), 'organizations = "Aer \\"Lingus\\""');
   assert.equal(jqlEmptyClause(b), null);
+});
+
+test('same-meaning lists parse from text, drop repeats and need two words', () => {
+  assert.deepEqual(synonymList(undefined), DEFAULT_SYNONYMS);
+  assert.deepEqual(synonymList('pinpad = bluepad, pin  pad\n\nlonely\nBluepad, card reader, terminal'), [['pinpad', 'bluepad', 'pin pad'], ['card reader', 'terminal']]);
+  assert.deepEqual(synonymList([['a1', 'b1'], 'c1: d1']), [['a1', 'b1'], ['c1', 'd1']]);
+  assert.equal(synonymList(Array.from({ length: 60 }, (_, i) => `w${i}, v${i}`)).length, 40);
+  assert.deepEqual(sanitizeSettings({ synonyms: '' }, []).synonyms, []);
 });

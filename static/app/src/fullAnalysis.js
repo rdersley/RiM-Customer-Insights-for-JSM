@@ -24,7 +24,7 @@ async function pool(tasks, limit) {
 }
 
 function groupOnPage(args) {
-  return buildReport(args.issues, args.startDate, args.endDate, null, { limit: Infinity, breakdowns: args.breakdowns || [], minPatternSize: args.minPatternSize, placeholders: args.placeholders || [], timeZone: args.timeZone });
+  return buildReport(args.issues, args.startDate, args.endDate, null, { limit: Infinity, breakdowns: args.breakdowns || [], minPatternSize: args.minPatternSize, placeholders: args.placeholders || [], synonyms: args.synonyms || [], timeZone: args.timeZone });
 }
 
 /** Groups in a Web Worker so the page stays responsive; falls back to the page. */
@@ -80,7 +80,7 @@ export async function analyseEveryTicket({ query, sampled, onProgress, isCancell
   await pool(tasks, CONCURRENCY);
   if (isCancelled()) throw new Cancelled('Cancelled');
   onProgress(issues.length, total, 'grouping');
-  const report = await group({ issues, startDate: sampled.startDate, endDate: sampled.endDate, breakdowns: sampled.breakdownFields || [], minPatternSize: sampled.minPatternSize, placeholders: sampled.placeholders || [], timeZone: sampled.timeOfDay?.timeZone });
+  const report = await group({ issues, startDate: sampled.startDate, endDate: sampled.endDate, breakdowns: sampled.breakdownFields || [], minPatternSize: sampled.minPatternSize, placeholders: sampled.placeholders || [], synonyms: sampled.synonyms || [], timeZone: sampled.timeOfDay?.timeZone });
   return {
     ...report,
     organization: sampled.organization,

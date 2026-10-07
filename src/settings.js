@@ -8,6 +8,15 @@ export const MIN_PATTERN = { min: 2, max: 10, default: 3 };
 // Breakdown values that mean "nobody filled this in". Admins can change the list.
 export const DEFAULT_PLACEHOLDERS = ['Unknown', 'Please update', 'Please select', 'N/A', 'None', 'Not set', 'TBC', 'TBD', '-'];
 export const MAX_PLACEHOLDERS = 30;
+// Words that mean the same thing in tickets, so they group together. The first
+// word of each line is the one shown. Crew and customers often name a device
+// by its make ("bluepad") in one ticket and its type ("pinpad") in the next.
+export const DEFAULT_SYNONYMS = [
+  ['pinpad', 'pin pad', 'bluepad', 'blue pad', 'card reader', 'card terminal', 'payment terminal', 'payment device'],
+  ['sync', 'synchronisation', 'synchronization', 'synchronise', 'synchronize', 'synchronising', 'synchronizing'],
+  ['login', 'log in', 'logon', 'log on', 'sign in', 'signin'],
+];
+export const SYNONYM_LIMITS = { groups: 40, words: 20, length: 40 };
 // Spike alerts (src/alerts.js). Off until an admin turns them on; creating a
 // Jira ticket per alert is a separate switch.
 export const MAX_WATCHED = 25;
@@ -22,7 +31,7 @@ export const DEFAULT_ALERTS = {
   issueTypeName: 'Task',
   issueTypeId: '',
 };
-export const DEFAULT_SETTINGS = { breakdowns: [], portalEnabled: false, minPatternSize: MIN_PATTERN.default, placeholders: DEFAULT_PLACEHOLDERS, alerts: DEFAULT_ALERTS };
+export const DEFAULT_SETTINGS = { breakdowns: [], portalEnabled: false, minPatternSize: MIN_PATTERN.default, placeholders: DEFAULT_PLACEHOLDERS, synonyms: DEFAULT_SYNONYMS, alerts: DEFAULT_ALERTS };
 
 const whole = (value, { min, max, default: fallback }) => {
   const n = Number(value);
@@ -64,6 +73,27 @@ export function placeholderList(input) {
     .map((v) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, 60))
     .filter((v) => v && !seen.has(v.toLowerCase()) && seen.add(v.toLowerCase()))
     .slice(0, MAX_PLACEHOLDERS);
+}
+
+/**
+ * Same-meaning word lists from arrays or text, one list per line: "pinpad =
+ * bluepad, pin pad" (or just commas). Lists need two or more words; a word
+ * already in an earlier list is skipped so each word means one thing.
+ */
+export function synonymList(input) {
+  if (input === undefined || input === null) return DEFAULT_SYNONYMS;
+  const lines = Array.isArray(input) ? input : String(input).split('\n');
+  const used = new Set();
+  const out = [];
+  for (const line of lines) {
+    const words = (Array.isArray(line) ? line : String(line ?? '').split(/[=,:;]/))
+      .map((w) => String(w ?? '').replace(/\s+/g, ' ').trim().slice(0, SYNONYM_LIMITS.length))
+      .filter((w) => /[a-z0-9]/i.test(w) && !used.has(w.toLowerCase()) && used.add(w.toLowerCase()))
+      .slice(0, SYNONYM_LIMITS.words);
+    if (words.length >= 2) out.push(words);
+    if (out.length >= SYNONYM_LIMITS.groups) break;
+  }
+  return out;
 }
 
 /** A pattern minimum within range; anything else falls back to the default. */
@@ -124,7 +154,7 @@ export function sanitizeSettings(input, selectable, organizations = []) {
     .map((b) => byId.get(String(b?.id)) && { ...byId.get(String(b.id)), label: clip(b.label, 40) || byId.get(String(b.id)).name, portal: b.portal === true })
     .filter((b) => b && !seen.has(b.id) && seen.add(b.id))
     .slice(0, MAX_BREAKDOWNS);
-  return { breakdowns, portalEnabled: input?.portalEnabled === true, minPatternSize: patternMinimum(input?.minPatternSize), placeholders: placeholderList(input?.placeholders), alerts: sanitizeAlerts(input?.alerts, organizations) };
+  return { breakdowns, portalEnabled: input?.portalEnabled === true, minPatternSize: patternMinimum(input?.minPatternSize), placeholders: placeholderList(input?.placeholders), synonyms: synonymList(input?.synonyms), alerts: sanitizeAlerts(input?.alerts, organizations) };
 }
 
 const quote = (v) => `"${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;

@@ -8,13 +8,15 @@ import '@retailinmotion/ui/css';
 import { enableTheme } from '@retailinmotion/ui/theme';
 import { ActionBar, AppHeader, Button, Card, Field, Footer, Loading, Notice } from '@retailinmotion/ui/react';
 import { version } from '../../../package.json';
-import { ALERT_LIMITS, DEFAULT_ALERTS, DEFAULT_PLACEHOLDERS, MAX_BREAKDOWNS, MAX_PLACEHOLDERS, MAX_WATCHED, MIN_PATTERN } from '../../../src/settings.js';
+import { ALERT_LIMITS, DEFAULT_ALERTS, DEFAULT_PLACEHOLDERS, DEFAULT_SYNONYMS, MAX_BREAKDOWNS, MAX_PLACEHOLDERS, MAX_WATCHED, MIN_PATTERN, SYNONYM_LIMITS } from '../../../src/settings.js';
 import BackupRestore from './BackupRestore.jsx';
 import './styles.css';
 
 enableTheme(view);
 
 const PRODUCT = 'Customer Insights';
+// Saved lists show as "first = the rest"; text being edited is kept as typed.
+const synonymText = (value) => (Array.isArray(value) ? value.map((list) => `${list[0]} = ${list.slice(1).join(', ')}`).join('\n') : value);
 
 function App() {
   const [state, setState] = useState({ loading: true });
@@ -99,12 +101,18 @@ function App() {
         </div>
       </Card>
 
-      <Card title="Patterns" description="How many similar tickets it takes before Customer Insights reports them as a recurring issue.">
+      <Card title="Patterns" description="How tickets are grouped into recurring issues.">
         <Field label="Minimum tickets per pattern" htmlFor="cs-min-pattern"
           help={`Between ${MIN_PATTERN.min} and ${MIN_PATTERN.max}. Higher numbers show fewer, more established issues. For large customers this counts tickets in the analysed sample.`}>
           <input id="cs-min-pattern" className="nq-input cs-number" type="number" min={MIN_PATTERN.min} max={MIN_PATTERN.max} step={1}
             value={draft.minPatternSize ?? MIN_PATTERN.default}
             onChange={(e) => { setSaved(false); setDraft((d) => ({ ...d, minPatternSize: Number(e.target.value) })); }} />
+        </Field>
+        <Field label="Words that mean the same" htmlFor="cs-synonyms"
+          help={`One list per line, for example “pinpad = bluepad, pin pad, card reader”. Tickets using any of them group together under the first word. Up to ${SYNONYM_LIMITS.groups} lines; capital letters, hyphens and plurals don’t matter.`}>
+          <textarea id="cs-synonyms" className="nq-textarea" rows={5}
+            value={synonymText(draft.synonyms ?? DEFAULT_SYNONYMS)}
+            onChange={(e) => { setSaved(false); setDraft((d) => ({ ...d, synonyms: e.target.value })); }} />
         </Field>
       </Card>
 

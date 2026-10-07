@@ -17,7 +17,7 @@ A Forge app that finds the recurring issues behind a customer organisation's tic
 
 ## Settings
 
-Jira settings → Apps → Customer Insights (Jira admins): breakdown fields and which show on the portal, minimum tickets per pattern, placeholder values, spike alerts, and the customer portal switch. Settings are per site.
+Jira settings → Apps → Customer Insights (Jira admins): breakdown fields and which show on the portal, minimum tickets per pattern, words that mean the same (for example pinpad, bluepad and card reader), placeholder values, spike alerts, and the customer portal switch. Settings are per site.
 
 ## Data and permissions
 
