@@ -1,6 +1,6 @@
 {
   "name": "retailinmotion-customer-insights",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "private": true,
   "type": "module",
   "description": "Customer ticket trend analysis for Jira Service Management Cloud",
@@ -8,7 +8,7 @@
     "build": "npm run build:ui",
     "build:ui": "vite build --config static/app/vite.config.js && vite build --config static/portal/vite.config.js && vite build --config static/settings/vite.config.js",
     "test": "node --test --experimental-test-module-mocks && npm run check:ui",
-    "lint": "node --check src/index.js && node --check src/analysis.js && node --check src/portal.js && node --check src/publish.js && node --check src/settings.js && node --check src/engine.js && node --check src/live.js && node --check src/liveJobs.js && node --check src/alerts.js && node --check src/storage.js && node --check src/timeOfDay.js && node --check src/backup.js && node --check src/pdfReport.js && node --check src/problem.js && node --check static/app/src/exportPdf.js",
+    "lint": "node --check src/index.js && node --check src/analysis.js && node --check src/portal.js && node --check src/publish.js && node --check src/settings.js && node --check src/engine.js && node --check src/live.js && node --check src/liveJobs.js && node --check src/alerts.js && node --check src/storage.js && node --check src/timeOfDay.js && node --check src/backup.js && node --check src/pdfReport.js && node --check src/problem.js && node --check src/headcount.js && node --check static/app/src/exportPdf.js",
     "check:ui": "retailinmotion-ui-check static/app/src static/portal/src static/settings/src"
   },
   "dependencies": {

@@ -11,6 +11,7 @@ import { readJson, runAnalysis, parseQuery } from './engine.js';
 import { assignToApproved } from './ai.js';
 import { assignByWords, isDue, liveCounts, livePeriod, refreshedSnapshotInput } from './live.js';
 import { snapshotFrom } from './publish.js';
+import { crewRates } from './headcount.js';
 import * as storage from './storage.js';
 import { checkOrganisation, isCheckDue } from './alerts.js';
 
@@ -67,7 +68,7 @@ export async function refreshLiveReport(orgId) {
     const config = { ...stored, organization: await currentOrganisation(orgId) };
     const { from, to } = livePeriod(config);
     const query = parseQuery({ organization: config.organization, startDate: from, endDate: to, projects: config.projects, timeZone: config.timeZone });
-    const { breakdowns, minPatternSize, placeholders, synonyms } = await loadSettings();
+    const { breakdowns, minPatternSize, placeholders, synonyms, headcounts } = await loadSettings();
     const report = await runAnalysis(query, { breakdowns, minPatternSize, placeholders, synonyms, mode: 'app', budgetMs: 240000 });
     let assignments;
     try {
@@ -79,7 +80,10 @@ export async function refreshLiveReport(orgId) {
     const counts = liveCounts(report, config.approved, assignments);
     const linkTo = await portalLinker();
     for (const pattern of counts.patterns) for (const example of pattern.examples || []) example.url = linkTo(example.key);
-    const snapshot = snapshotFrom(refreshedSnapshotInput(config, report, counts, new Date(), { breakdowns }), { detailed: true });
+    // Tickets per 100 crew only when an admin ticked "Show on portal" for this organisation.
+    const headcount = (headcounts || []).find((h) => h.organization.id === String(orgId) && h.portal);
+    const crew = headcount ? crewRates(report, headcount) : null;
+    const snapshot = snapshotFrom(refreshedSnapshotInput(config, report, counts, new Date(), { breakdowns, crewRates: crew }), { detailed: true });
     // Don't overwrite if the agent removed or replaced the live report meanwhile.
     const current = await loadLiveConfig(orgId);
     if (!current || current.publishedAt !== config.publishedAt) return { skipped: 'changed while refreshing' };

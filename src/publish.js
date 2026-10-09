@@ -35,6 +35,25 @@ const timeOfDayOf = (value) => (Array.isArray(value?.grid) && value.grid.length 
   ? { timeZone: validTimeZone(value.timeZone), grid: value.grid.map((row) => row.map(count)), estimated: Boolean(value.estimated) }
   : null);
 
+// Tickets per 100 crew (headcount.js), when an admin shows it on the portal.
+const rate = (value) => (Number.isFinite(Number(value)) && value !== null ? Math.max(0, Math.round(Number(value) * 10) / 10) : null);
+function crewOf(value) {
+  if (!value || !Array.isArray(value.bases) || !value.bases.length) return null;
+  return {
+    field: clip(value.field, 40),
+    crew: count(value.crew),
+    rate: rate(value.rate),
+    previousRate: rate(value.previousRate),
+    average: rate(value.average),
+    estimated: Boolean(value.estimated),
+    updatedAt: ISO_TIME.test(String(value.updatedAt)) ? String(value.updatedAt) : null,
+    bases: value.bases.slice(0, 300).map((b) => ({
+      value: clip(b?.value, 80), crew: count(b?.crew), tickets: count(b?.tickets), previous: count(b?.previous),
+      rate: rate(b?.rate), previousRate: rate(b?.previousRate), ratio: rate(b?.ratio), small: Boolean(b?.small),
+    })).filter((b) => b.value && b.crew),
+  };
+}
+
 function patternDetails(p) {
   return {
     hours: hourCounts(p?.hours),
@@ -87,6 +106,7 @@ export function snapshotFrom(input, { now = new Date(), detailed = false } = {})
     resolution: input?.resolution ? { medianHours: hours(input.resolution.medianHours), openShare: share(input.resolution.openShare) } : null,
     breakdowns: breakdownsOf(input?.breakdowns),
     timeOfDay: timeOfDayOf(input?.timeOfDay),
+    crewRates: crewOf(input?.crewRates),
   } : {};
   const current = count(input?.totals?.current);
   const previous = count(input?.totals?.previous);

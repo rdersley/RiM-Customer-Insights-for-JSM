@@ -10,3 +10,12 @@
   .cs-row, .cs-row--pair { grid-template-columns: minmax(0, 1fr); }
 }
 .cs-portal { white-space: nowrap; padding-bottom: var(--nq-space-075, 6px); }
+
+/* Crew numbers */
+.cs-crew { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--nq-space-150); align-items: center; padding-bottom: var(--nq-space-150); border-bottom: 1px solid var(--nq-border); }
+.cs-crew p { margin: var(--nq-space-050) 0 0; }
+.cs-crew__top { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cs-crew__add .nq-select { margin-top: var(--nq-space-075, 6px); }
+.cs-file { position: relative; overflow: hidden; cursor: pointer; }
+.cs-file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+@media (max-width: 700px) { .cs-crew { grid-template-columns: minmax(0, 1fr); } }

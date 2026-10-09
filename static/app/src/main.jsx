@@ -8,6 +8,8 @@ import { version } from '../../../package.json';
 import { localIso, matchPreset, presetRange, PRESETS } from '../../../src/dates.js';
 import { analyseEveryTicket, Cancelled, FULL_LIMIT } from './fullAnalysis.js';
 import { exportPdf } from './exportPdf.js';
+import CrewRates from './CrewRates.jsx';
+import { crewRates } from '../../../src/headcount.js';
 import { applyMerges, categoriesOf, median, patternTrend, topShares } from '../../../src/analysis.js';
 import { jqlClause, jqlEmptyClause } from '../../../src/settings.js';
 import { changeText } from '../../../src/alertText.js';
@@ -228,6 +230,15 @@ function App() {
     invoke('getPublication', { orgId: reportOrgId }).then(setPublication).catch((e) => setPublishError(e.message || 'Could not check the portal report.'));
   }, [report?.organization, report?.startDate, report?.endDate, reportOrgId]);
 
+  // Crew numbers for this organisation (settings → Crew numbers), for tickets per 100 crew.
+  const [headcount, setHeadcount] = useState(null);
+  useEffect(() => {
+    setHeadcount(null);
+    if (!reportOrgId) return;
+    invoke('getHeadcount', { orgId: reportOrgId }).then(setHeadcount).catch(() => {});
+  }, [reportOrgId]);
+  const crew = report && headcount ? crewRates(report, headcount) : null;
+
   function prepareDraft() {
     setPublishError('');
     setDraft({
@@ -349,6 +360,10 @@ function App() {
       rows.push([], [`Tickets by hour (${report.timeOfDay.timeZone})`, ...DAYS]);
       for (let h = 0; h < 24; h += 1) rows.push([`${String(h).padStart(2, '0')}:00`, ...report.timeOfDay.grid.map((row) => row[h])]);
     }
+    if (crew) {
+      rows.push([], [`Tickets per 100 crew by ${crew.field}`, 'Crew', 'Tickets', 'Per 100 crew', 'Vs average', 'Previous period per 100 crew']);
+      for (const b of [...crew.bases].sort((a, b) => b.rate - a.rate)) rows.push([b.value, b.crew, b.tickets, b.rate, b.ratio, b.previousRate]);
+    }
     rows.push([], ['Date bucket', 'Tickets']);
     for (const point of report.timeSeries) rows.push([point.date, point.count]);
     if (qualityIssues.length) {
@@ -367,7 +382,7 @@ function App() {
     if (!report) return;
     setPdfBusy(true);
     try {
-      await exportPdf({ report, groups, ai, filter: report.filter, product: PRODUCT, version });
+      await exportPdf({ report, groups, ai, filter: report.filter, crew, product: PRODUCT, version });
     } catch (e) {
       setError(`The PDF couldn’t be created: ${e.message || 'unknown error'}`);
     } finally { setPdfBusy(false); }
@@ -671,6 +686,11 @@ function App() {
           </Card>;
         })}</div>
         : <p className="nq-muted">Tip: a Jira admin can add breakdowns by base, device type or any other field in <strong>Jira settings → Apps → Customer Insights</strong>.</p>}
+
+      {crew && <CrewRates rates={crew} approx={crew.estimated ? '≈' : ''} onDrill={(() => {
+        const field = report.breakdownFields?.find((f) => f.id === headcount.fieldId);
+        return field && !filter && canDrill(field, 'x') ? (value) => drill(field, value) : null;
+      })()} />}
 
       {report.timeOfDay?.analysed > 0 && (() => {
         const { grid, timeZone, estimated, analysed } = report.timeOfDay;

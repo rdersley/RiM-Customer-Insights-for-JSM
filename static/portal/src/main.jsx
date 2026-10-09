@@ -11,6 +11,7 @@ import { Button, Card, EmptyState, Kpi, Loading, Lozenge, Notice } from '@retail
 import { duration, sparkPath, trendWord } from '../../../src/trend.js';
 import { DAYS, hoursOf, peakWindow, windowText } from '../../../src/timeOfDay.js';
 import { version } from '../../../package.json';
+import CrewRates from '../../app/src/CrewRates.jsx';
 import './styles.css';
 
 enableTheme(view);
@@ -174,6 +175,7 @@ function Report({ report, onRefresh, refreshNote }) {
       <ol className="cp-issues">{report.patterns.map((p) => <Issue key={p.title} pattern={p} />)}</ol>
     </Card>}
     {report.timeOfDay && <WhenRequestsArrive timeOfDay={report.timeOfDay} />}
+    {report.crewRates && <CrewRates rates={report.crewRates} approx={report.crewRates.estimated ? '≈' : ''} noun="requests" source="your crew list" />}
     {report.breakdowns?.length > 0 && <div className="nq-grid cp-breakdowns">{report.breakdowns.map((b) => {
       const top = Math.max(1, ...b.values.map((v) => v.count));
       return <Card key={b.label} title={`By ${b.label}`}>

@@ -346,6 +346,8 @@ export function topShares(group, fieldId, limit = 3) {
 }
 
 const BREAKDOWN_VALUES = 10;
+// Every value's counts, for rates against crew numbers (headcount.js).
+const BREAKDOWN_ALL = 300;
 
 function buildBreakdowns(breakdowns, current, previous, currentScale, previousScale) {
   const now = dimCountsOf(current);
@@ -364,7 +366,11 @@ function buildBreakdowns(breakdowns, current, previous, currentScale, previousSc
       .sort((a, b) => b.count - a.count)
       .slice(0, BREAKDOWN_VALUES);
     const withValue = current.filter((issue) => issue.dims?.[id]?.length).length;
-    return { id, label, values, withoutValue: Math.round((current.length - withValue) * currentScale), estimated: currentScale > 1 };
+    const all = Object.keys({ ...cur, ...prev })
+      .map((value) => [value, Math.round((cur[value] || 0) * currentScale), Math.round((prev[value] || 0) * previousScale)])
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, BREAKDOWN_ALL);
+    return { id, label, values, all, withoutValue: Math.round((current.length - withValue) * currentScale), estimated: currentScale > 1 };
   });
 }
 

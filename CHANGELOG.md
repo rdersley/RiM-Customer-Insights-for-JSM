@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.8.0 (2026-10-09)
+
+- **Tickets per 100 crew:** a Jira admin uploads a customer's crew list in settings (Crew numbers). Only the number of crew per base is kept; the file is read in the browser, so names and contact details never leave the admin's computer. Reports then show tickets per 100 crew overall and for each base, ranked by rate and compared with the average, so a small base with lots of issues stands out next to STN or DUB. Small bases are marked, bases with tickets but no crew number are listed, and the table is in the PDF and CSV.
+- **Portal (optional):** tick "Show on portal" for an organisation and its live portal report shows requests per 100 crew from the next refresh, in the page and the PDF.
+
 ## 1.7.0 (2026-10-09)
 
 - **AI categories:** "Summarise with AI" now also sorts the issues into a few broad categories (for example vPOS, payment devices, stock and products) with totals and change, and each category opens to its patterns. Switch between By category and All patterns. Categories are in the PDF and CSV, and the AI overview leads with them.

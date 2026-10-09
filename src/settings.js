@@ -2,6 +2,8 @@
 // Nothing site-specific is hard-coded: breakdown fields are picked from the
 // site's own Jira fields.
 
+import { sanitizeHeadcounts } from './headcount.js';
+
 export const MAX_BREAKDOWNS = 5;
 // Fewest tickets (in the analysed sample) for a group to count as a pattern.
 export const MIN_PATTERN = { min: 2, max: 10, default: 3 };
@@ -31,7 +33,7 @@ export const DEFAULT_ALERTS = {
   issueTypeName: 'Task',
   issueTypeId: '',
 };
-export const DEFAULT_SETTINGS = { breakdowns: [], portalEnabled: false, minPatternSize: MIN_PATTERN.default, placeholders: DEFAULT_PLACEHOLDERS, synonyms: DEFAULT_SYNONYMS, alerts: DEFAULT_ALERTS };
+export const DEFAULT_SETTINGS = { breakdowns: [], headcounts: [], portalEnabled: false, minPatternSize: MIN_PATTERN.default, placeholders: DEFAULT_PLACEHOLDERS, synonyms: DEFAULT_SYNONYMS, alerts: DEFAULT_ALERTS };
 
 const whole = (value, { min, max, default: fallback }) => {
   const n = Number(value);
@@ -154,7 +156,7 @@ export function sanitizeSettings(input, selectable, organizations = []) {
     .map((b) => byId.get(String(b?.id)) && { ...byId.get(String(b.id)), label: clip(b.label, 40) || byId.get(String(b.id)).name, portal: b.portal === true })
     .filter((b) => b && !seen.has(b.id) && seen.add(b.id))
     .slice(0, MAX_BREAKDOWNS);
-  return { breakdowns, portalEnabled: input?.portalEnabled === true, minPatternSize: patternMinimum(input?.minPatternSize), placeholders: placeholderList(input?.placeholders), synonyms: synonymList(input?.synonyms), alerts: sanitizeAlerts(input?.alerts, organizations) };
+  return { breakdowns, headcounts: sanitizeHeadcounts(input?.headcounts, organizations, breakdowns), portalEnabled: input?.portalEnabled === true, minPatternSize: patternMinimum(input?.minPatternSize), placeholders: placeholderList(input?.placeholders), synonyms: synonymList(input?.synonyms), alerts: sanitizeAlerts(input?.alerts, organizations) };
 }
 
 const quote = (v) => `"${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
