@@ -4,7 +4,7 @@ import { textOf } from './analysis.js';
 import { filterFor, organisationsOf, parseQuery, pool, readJson, runAnalysis, searchPage } from './engine.js';
 import { licenseAllows, UNLICENSED_MESSAGE } from './license.js';
 import { exportBackupPage, importBackupBatch } from './backup.js';
-import { suggestMerges, summarise } from './ai.js';
+import { suggestCategories, suggestMerges, summarise } from './ai.js';
 import { snapshotFrom } from './publish.js';
 import { deleteLive, deleteReport, listAlerts, loadAlert, loadLiveConfig, loadLiveState, loadReport, loadSettings, saveAlert, saveLiveConfig, saveReport, saveSettings } from './storage.js';
 import { isLive, liveConfigFrom } from './live.js';
@@ -157,6 +157,15 @@ define('aiMerge', async ({ payload, context }) => {
   const startedAt = Date.now();
   const result = await suggestMerges(payload?.report || {});
   console.log(`aiMerge: ${result.model}, ${result.merges.length} merged issues in ${Date.now() - startedAt}ms`);
+  return result;
+});
+
+// Step 2: broad categories over the merged patterns. Indexes and titles only.
+define('aiCategorise', async ({ payload, context }) => {
+  if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
+  const startedAt = Date.now();
+  const result = await suggestCategories(payload?.report || {});
+  console.log(`aiCategorise: ${result.model}, ${result.categories.length} categories in ${Date.now() - startedAt}ms`);
   return result;
 });
 

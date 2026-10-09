@@ -417,6 +417,36 @@ export function applyMerges(groups, merges) {
   });
 }
 
+/**
+ * Totals patterns into AI categories ({ title, members: [group indexes] }).
+ * Groups are disjoint, so counts add up. Patterns left out (beyond what the AI
+ * saw, or skipped) go under "Other". Biggest category first; each keeps its
+ * pattern indexes, biggest first.
+ */
+export function categoriesOf(groups, categories) {
+  const seen = new Set();
+  const list = (categories || []).map((c) => ({ title: c.title, members: c.members.filter((i) => i >= 0 && i < groups.length && !seen.has(i) && seen.add(i)) }));
+  const rest = groups.map((_, i) => i).filter((i) => !seen.has(i));
+  if (rest.length) {
+    const other = list.find((c) => /^other$/i.test(c.title));
+    if (other) other.members.push(...rest); else list.push({ title: 'Other', members: rest });
+  }
+  return list.filter((c) => c.members.length).map((c) => {
+    const members = [...c.members].sort((a, b) => groups[b].count - groups[a].count);
+    const count = members.reduce((n, i) => n + groups[i].count, 0);
+    const previousCount = members.reduce((n, i) => n + (groups[i].previousCount || 0), 0);
+    return {
+      title: c.title,
+      members,
+      count,
+      previousCount,
+      change: count - previousCount,
+      changePercent: previousCount ? Math.round(((count - previousCount) / previousCount) * 100) : null,
+      estimated: members.some((i) => groups[i].estimated),
+    };
+  }).sort((a, b) => b.count - a.count);
+}
+
 const DAY = 86400000;
 const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
 

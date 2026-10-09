@@ -140,3 +140,19 @@ test('the portal PDF shows only what the published report shows', () => {
   assert.ok(doc.getNumberOfPages() >= 1);
   assert.ok(doc.output().length > 2000);
 });
+
+test('AI categories go in the PDF with shares and their biggest patterns', async () => {
+  const { categoriesOf } = await import('../src/analysis.js');
+  const report = sampleReport();
+  const groups = report.groups;
+  assert.ok(groups.length >= 3);
+  const categories = categoriesOf(groups, [{ title: 'Devices', members: [0, 1] }]);
+  const c = pdfContent({ report, ai: { overview: '', actions: [], patterns: [], categories } });
+  assert.equal(c.categories.length, 2);
+  assert.equal(c.categories[0].title, categories[0].title);
+  assert.match(c.categories[0].patterns, /\(\d+\)/);
+  assert.equal(c.categories.reduce((n, cat) => n + Number(cat.share.replace('%', '')), 0) >= 99, true);
+  assert.deepEqual(pdfContent({ report }).categories, []);
+  const doc = buildPdf(jsPDF, c, { product: 'Customer Insights', version: '1.7.0' });
+  assert.ok(doc.output().length > 2000);
+});
