@@ -30,7 +30,7 @@ Jira settings → Apps → Customer Insights (Jira admins): breakdown fields and
 | `write:jira-work` | Only spike alert tickets, when an admin switches them on |
 | `storage:app` | Settings, published portal reports, alerts |
 
-Stored in Forge storage: settings (including crew numbers per base: counts only; crew lists are read in the admin's browser and names or contact details are never uploaded), published portal reports (counts, trends, the agent's text, up to 5 example ticket keys and summaries per issue) and spike alerts (kept 30 days). No account ids are stored. Everything is deleted when the app is uninstalled.
+Stored in Forge storage: settings (including crew numbers per base: counts only; crew lists are read in the admin's browser and names or contact details are never uploaded), published portal reports (counts, trends, the agent's text, up to 5 example ticket keys and summaries per issue) spike and surge alerts (kept 30 days), and the open surges per watched organisation. No account ids are stored. Everything is deleted when the app is uninstalled.
 
 ## Develop
 
