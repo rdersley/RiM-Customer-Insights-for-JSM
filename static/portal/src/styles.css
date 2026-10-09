@@ -74,3 +74,11 @@ a.cp-key:hover { text-decoration: underline; }
   .cp-heat { grid-template-columns: 30px repeat(24, minmax(0, 1fr)); gap: 1px; }
   .cp-heat__cell { height: 12px; }
 }
+
+/* Requests per 100 crew (shared component from the agent page) */
+.ci-crew__sort { width: auto; }
+.ci-crew .ci-num { text-align: right; white-space: nowrap; }
+.ci-crew__rate { display: grid; grid-template-columns: minmax(60px, 1fr) 44px; gap: var(--nq-space-100); align-items: center; }
+.ci-crew__rate strong { text-align: right; }
+.ci-meter { height: 6px; background: var(--nq-bg-neutral); border-radius: var(--nq-radius-sm); overflow: hidden; }
+.ci-meter i { display: block; height: 100%; background: var(--nq-bg-brand); }

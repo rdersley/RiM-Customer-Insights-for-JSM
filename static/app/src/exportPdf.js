@@ -213,6 +213,38 @@ export function buildPdf(JsPdf, c, { product = 'Customer Insights', version = ''
     }
   }
 
+  // ---- Tickets per 100 crew ------------------------------------------------------
+  if (c.crew) {
+    heading('Tickets per 100 crew');
+    paragraph(c.crew.summary, { size: 9, rgb: MUTED, gap: 2 });
+    const cols = [{ label: 'Crew', x: 100 }, { label: nouns, x: 122 }, { label: 'Per 100 crew', x: 150 }, { label: 'Vs average', x: 172 }, { label: 'Previous', x: W - M }];
+    const header = () => {
+      font(8, 'bold', MUTED);
+      doc.text(pdfSafe(c.crew.field), M, y + 4);
+      cols.forEach((col) => doc.text(col.label, col.x, y + 4, { align: 'right' }));
+      y += 6; doc.setDrawColor(...RULE); doc.setLineWidth(0.3); doc.line(M, y, W - M, y); y += 1;
+    };
+    header();
+    onNewPage = header;
+    for (const b of c.crew.bases) {
+      room(lineHeight(9.5) + 1.5);
+      const base = y + lineHeight(9.5) * 0.78;
+      font(9.5, 'bold'); doc.text(split(b.value, 80)[0] || '', M, base);
+      font(9.5, 'normal', MUTED); doc.text(pdfSafe(b.crew), cols[0].x, base, { align: 'right' });
+      font(9.5, 'normal'); doc.text(pdfSafe(b.tickets), cols[1].x, base, { align: 'right' });
+      font(9.5, 'bold'); doc.text(pdfSafe(b.rate), cols[2].x, base, { align: 'right' });
+      const ratio = parseFloat(b.ratio);
+      font(9.5, 'bold', ratio >= 1.5 ? MORE : ratio <= 0.5 ? FEWER : MUTED); doc.text(pdfSafe(b.ratio), cols[3].x, base, { align: 'right' });
+      font(9, 'normal', MUTED); doc.text(pdfSafe(b.previous), cols[4].x, base, { align: 'right' });
+      y += lineHeight(9.5) + 0.5;
+      doc.setDrawColor(...RULE); doc.setLineWidth(0.15); doc.line(M, y, W - M, y); y += 1;
+    }
+    onNewPage = null;
+    y += 2;
+    if (c.crew.more) paragraph(`${c.crew.more} more bases with lower rates are not shown.`, { size: 8, rgb: MUTED });
+    for (const note of c.crew.notes) paragraph(note, { size: 8, rgb: MUTED });
+  }
+
   // ---- Breakdowns ----------------------------------------------------------------
   for (const b of c.breakdowns) {
     heading(`By ${b.label}`);

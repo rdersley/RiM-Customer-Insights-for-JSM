@@ -154,3 +154,9 @@
 .ci-problem__fields .nq-field { margin: 0; }
 .ci-check { display: flex; align-items: center; gap: var(--nq-space-100); color: var(--nq-text); }
 @media (max-width: 900px) { .ci-problem__fields { grid-template-columns: minmax(0, 1fr); } }
+
+/* Tickets per 100 crew */
+.ci-crew__sort { width: auto; }
+.ci-crew .ci-num { text-align: right; white-space: nowrap; }
+.ci-crew__rate { display: grid; grid-template-columns: minmax(60px, 1fr) 44px; gap: var(--nq-space-100); align-items: center; }
+.ci-crew__rate strong { text-align: right; }

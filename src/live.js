@@ -147,6 +147,7 @@ export function refreshedSnapshotInput(config, report, counts, now = new Date(),
     resolution: report.resolution || null,
     timeOfDay: report.timeOfDay ? { timeZone: report.timeOfDay.timeZone, grid: report.timeOfDay.grid, estimated: report.timeOfDay.estimated } : null,
     breakdowns: portalBreakdowns(report, options.breakdowns),
+    crewRates: options.crewRates || null,
   };
 }
 

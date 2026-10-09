@@ -10,6 +10,7 @@ import { ActionBar, AppHeader, Button, Card, Field, Footer, Loading, Notice } fr
 import { version } from '../../../package.json';
 import { ALERT_LIMITS, DEFAULT_ALERTS, DEFAULT_PLACEHOLDERS, DEFAULT_SYNONYMS, MAX_BREAKDOWNS, MAX_PLACEHOLDERS, MAX_WATCHED, MIN_PATTERN, SYNONYM_LIMITS } from '../../../src/settings.js';
 import BackupRestore from './BackupRestore.jsx';
+import CrewNumbers from './CrewNumbers.jsx';
 import './styles.css';
 
 enableTheme(view);
@@ -100,6 +101,9 @@ function App() {
           <p className="nq-muted">Only fields that hold choices can be used: select lists, checkboxes, radio buttons, cascading selects, labels, components, priority and request type.</p>
         </div>
       </Card>
+
+      <CrewNumbers headcounts={draft.headcounts || []} organizations={state.organizations || []} breakdowns={state.settings.breakdowns} portalEnabled={draft.portalEnabled === true}
+        onChange={(headcounts) => { setSaved(false); setDraft((d) => ({ ...d, headcounts })); }} />
 
       <Card title="Patterns" description="How tickets are grouped into recurring issues.">
         <Field label="Minimum tickets per pattern" htmlFor="cs-min-pattern"

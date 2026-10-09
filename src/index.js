@@ -192,6 +192,15 @@ async function visibleOrganisation(orgId) {
   return { id: String(data.id), name: data.name };
 }
 
+// Crew numbers for one organisation (settings → Crew numbers), so the page can
+// show tickets per 100 crew. Only for organisations this agent can see.
+define('getHeadcount', async ({ payload, context }) => {
+  if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
+  const organization = await visibleOrganisation(payload?.orgId);
+  const { headcounts } = await loadSettings();
+  return (headcounts || []).find((h) => h.organization.id === organization.id) || null;
+});
+
 // Portal publishing follows each site's admin setting. (Not a Forge variable:
 // those apply to every site installed from an environment.)
 async function portalEnabled() {

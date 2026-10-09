@@ -28,7 +28,7 @@ export function resolutionLine({ medianHours, openShare } = {}) {
  * The report as PDF sections. `groups` are the patterns as shown (AI-merged
  * after "Summarise with AI"); `ai` is the AI summary, if any.
  */
-export function pdfContent({ report, groups = report?.groups || [], ai = null, generatedAt = new Date(), filter = null }) {
+export function pdfContent({ report, groups = report?.groups || [], ai = null, generatedAt = new Date(), filter = null, crew = null }) {
   if (!report) throw new Error('There is no report to export.');
   const nameOf = (group, index) => ai?.patterns?.find((p) => p.index === index)?.title || group.theme;
   const whereOf = (group) => (report.breakdownFields || [])
@@ -119,6 +119,7 @@ export function pdfContent({ report, groups = report?.groups || [], ai = null, g
     overview: ai?.overview || '',
     actions: ai?.actions || [],
     categories,
+    crew: crewSection(crew),
     volume: { points: report.timeSeries || [], unit: (Date.parse(report.endDate) - Date.parse(report.startDate)) / 86400000 < 35 ? 'day' : 'week' },
     issues,
     moreIssues: Math.max(0, groups.length - PDF_ISSUES),
@@ -192,6 +193,7 @@ export function portalPdfContent(snapshot, { generatedAt = new Date() } = {}) {
     moreIssues: Math.max(0, snapshot.patterns.length - PDF_ISSUES),
     breakdowns,
     timeOfDay,
+    crew: crewSection(snapshot.crewRates),
     dataQuality: [],
   };
 }
@@ -200,6 +202,37 @@ export function portalPdfContent(snapshot, { generatedAt = new Date() } = {}) {
 export function portalPdfFileName(snapshot) {
   const who = String(snapshot.organization?.name || 'report').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   return `service-report-${who}-${snapshot.period.from}-${snapshot.period.to}.pdf`;
+}
+
+export const PDF_CREW_BASES = 25;
+const rateText = (rate) => (rate === null || rate === undefined ? '–' : String(Math.round(rate * 10) / 10));
+
+/** Tickets per 100 crew (headcount.js crewRates) as a PDF section: the bases with the highest rates. */
+export function crewSection(rates) {
+  if (!rates?.bases?.length) return null;
+  const approxBase = approx(rates.estimated);
+  const bases = [...rates.bases].sort((a, b) => b.rate - a.rate || b.tickets - a.tickets);
+  const notes = [];
+  if (rates.unmatchedTickets) notes.push(`${approxBase}${rates.unmatchedTickets.toLocaleString('en-GB')} tickets are at bases with no crew number (${rates.unmatched.slice(0, 6).map((u) => u.value).join(', ')}).`);
+  if (bases.some((b) => b.small)) notes.push('* Small base: a handful of tickets changes the rate a lot.');
+  return {
+    field: rates.field,
+    summary: [
+      `${rates.crew.toLocaleString('en-GB')} crew at ${rates.bases.length} bases`,
+      rates.rate !== null ? `${rateText(rates.rate)} tickets per 100 crew (previous period ${rateText(rates.previousRate)})` : '',
+      `average across bases ${rateText(rates.average)}`,
+    ].filter(Boolean).join(' · '),
+    bases: bases.slice(0, PDF_CREW_BASES).map((b) => ({
+      value: `${b.value}${b.small ? ' *' : ''}`,
+      crew: b.crew.toLocaleString('en-GB'),
+      tickets: `${approxBase}${b.tickets.toLocaleString('en-GB')}`,
+      rate: rateText(b.rate),
+      ratio: b.ratio === null ? '–' : `${b.ratio}x`,
+      previous: rateText(b.previousRate),
+    })),
+    more: Math.max(0, bases.length - PDF_CREW_BASES),
+    notes,
+  };
 }
 
 /** "customer-insights-acme-2026-09-01-2026-09-30.pdf" */
