@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.0 (2026-10-07)
+
+- **Export PDF:** a printable report next to Export CSV, built in the browser: headline numbers, the AI summary and follow-ups (when generated), ticket activity, the top 25 recurring issues with where they happen, time to resolve and peak hours, example tickets for the top 10, breakdowns, when tickets arrive, and data quality. It uses the AI names when the AI summary has been run, and notes sampling and drill-down filters.
+
 ## 1.4.0 (2026-10-07)
 
 - **Words that mean the same:** tickets that call the same thing by different names now group together, for example "Bluepad connection" and "Pinpad connection", or "sync" and "synchronisation". Admins edit the lists in settings (Patterns); the first word of each list names the pattern. Defaults cover payment devices (pinpad, bluepad, pin pad, card reader…), sync and log in. The AI merge and live report refreshes are given the same lists.
