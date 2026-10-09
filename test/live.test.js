@@ -126,3 +126,20 @@ test('only breakdowns marked Show on portal reach customers, and detailed fields
   assert.deepEqual(built.breakdowns.map((b) => b.label), ['Base']);
   assert.deepEqual(built.resolution, { medianHours: 12.3, openShare: 100 });
 });
+
+test('portal reports keep the publishing agent\'s time zone and carry when requests arrive', () => {
+  const config = liveConfigFrom({ schedule: 'weekly', preset: 'last-30', timeZone: 'Europe/Dublin', approved }, { organization: org, now });
+  assert.equal(config.timeZone, 'Europe/Dublin');
+  assert.equal(liveConfigFrom({ schedule: 'weekly', timeZone: 'Mars/Base' }, { organization: org, now }).timeZone, 'UTC');
+  const grid = Array.from({ length: 7 }, () => new Array(24).fill(0)); grid[0][6] = 5;
+  const hours = new Array(24).fill(0); hours[6] = 3;
+  const report = { startDate: '2026-09-01', endDate: '2026-09-30', currentCount: 5, previousCount: 2, timeSeries: [], groups: [{ theme: 'Open barset', count: 3, previousCount: 1, hours, tickets: [] }], timeOfDay: { timeZone: 'Europe/Dublin', grid, estimated: false } };
+  const counts = liveCounts(report, approved, [0]);
+  assert.equal(counts.patterns[0].hours[6], 3);
+  const snap = snapshotFrom(refreshedSnapshotInput(config, report, counts, now), { detailed: true });
+  assert.equal(snap.timeOfDay.timeZone, 'Europe/Dublin');
+  assert.equal(snap.timeOfDay.grid[0][6], 5);
+  assert.equal(snap.patterns[0].hours[6], 3);
+  assert.equal('timeOfDay' in snapshotFrom(refreshedSnapshotInput(config, report, counts, now)), false);
+  assert.equal(snapshotFrom({ ...refreshedSnapshotInput(config, report, counts, now), timeOfDay: { grid: [[1]] } }, { detailed: true }).timeOfDay, null);
+});

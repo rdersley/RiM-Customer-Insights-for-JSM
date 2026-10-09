@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { jsPDF } from 'jspdf';
 import { buildReport } from '../src/analysis.js';
-import { pdfContent, pdfFileName, pdfSafe, PDF_DETAILS, PDF_ISSUES } from '../src/pdfReport.js';
+import { pdfContent, pdfFileName, pdfSafe, portalPdfContent, portalPdfFileName, PDF_DETAILS, PDF_ISSUES } from '../src/pdfReport.js';
+import { portalView, snapshotFrom } from '../src/publish.js';
 import { buildPdf } from '../static/app/src/exportPdf.js';
 
 const PROBLEMS = ['Bluepad connection', 'vPOS crashed', 'Sync issues', 'Printer paper jam', 'Open barset', 'Card declined at checkout'];
@@ -97,4 +98,45 @@ test('text is made safe for the built-in PDF fonts', () => {
 test('file names are tidy', () => {
   assert.equal(pdfFileName({ organization: 'Ryanair Crew!', startDate: '2026-09-01', endDate: '2026-09-30' }), 'customer-insights-ryanair-crew-2026-09-01-2026-09-30.pdf');
   assert.equal(pdfFileName({ organization: 'A, B', organizations: [{}, {}], startDate: '2026-09-01', endDate: '2026-09-30' }), 'customer-insights-2-organisations-2026-09-01-2026-09-30.pdf');
+});
+
+test('the portal PDF shows only what the published report shows', () => {
+  const grid = Array.from({ length: 7 }, (_, d) => Array.from({ length: 24 }, (_, h) => (d < 5 && h >= 9 && h < 12 ? 3 : 0)));
+  const snapshot = portalView({ ...snapshotFrom({
+    organization: { id: '188', name: 'Ryanair Crew' },
+    period: { from: '2026-09-01', to: '2026-09-30' },
+    totals: { current: 120, previous: 100 },
+    timeSeries: [{ date: '2026-09-01', count: 60 }, { date: '2026-09-08', count: 60 }],
+    patterns: [
+      { title: 'Bluepad connection', summary: 'Pads drop off the network.', count: 40, previousCount: 20, medianHours: 5, openShare: 10, hours: grid[0],
+        examples: [{ key: 'SD-1', summary: 'Bluepad offline', status: 'Resolved', url: 'https://x.atlassian.net/servicedesk/customer/portal/2/SD-1' }] },
+      { title: 'Printer paper jam', count: 5, previousCount: 0, estimated: true },
+    ],
+    overview: 'Bluepad issues doubled.',
+    actions: ['Check the access points at DUB.'],
+    resolution: { medianHours: 30, openShare: 12 },
+    breakdowns: [{ label: 'Base', values: [{ value: 'DUB', count: 30, previousCount: 20, medianHours: 4 }] }],
+    timeOfDay: { timeZone: 'Europe/Dublin', grid },
+    unreviewed: [{ title: 'Agent-only note', count: 3 }],
+  }, { detailed: true }), publishedBy: 'abc' });
+
+  const c = portalPdfContent(snapshot, { generatedAt: new Date('2026-10-01T09:00:00Z') });
+  assert.equal(c.noun, 'Request');
+  assert.equal(c.title, 'Ryanair Crew');
+  assert.deepEqual(c.kpis.map((k) => k.value), ['120', '+20%', '2', '1.3 days']);
+  assert.equal(c.issues[0].change, '+100%');
+  assert.equal(c.issues[0].resolution, '5 h to resolve · 10% open');
+  assert.deepEqual(c.issues[0].examples, [{ key: 'SD-1', summary: 'Bluepad offline', status: 'Resolved' }]);
+  assert.equal(c.issues[1].count, '~5');
+  assert.equal(c.issues[1].change, 'New');
+  assert.equal(c.breakdowns[0].values[0].change, '+50%');
+  assert.equal(c.timeOfDay.timeZone, 'Europe/Dublin');
+  assert.equal(c.timeOfDay.outOfHours, '0%');
+  assert.deepEqual(c.dataQuality, []);
+  assert.ok(!JSON.stringify(c).includes('Agent-only note'));
+  assert.equal(portalPdfFileName(snapshot), 'service-report-ryanair-crew-2026-09-01-2026-09-30.pdf');
+
+  const doc = buildPdf(jsPDF, c, { product: 'Customer Insights', version: '1.6.0' });
+  assert.ok(doc.getNumberOfPages() >= 1);
+  assert.ok(doc.output().length > 2000);
 });

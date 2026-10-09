@@ -66,7 +66,7 @@ export async function refreshLiveReport(orgId) {
   try {
     const config = { ...stored, organization: await currentOrganisation(orgId) };
     const { from, to } = livePeriod(config);
-    const query = parseQuery({ organization: config.organization, startDate: from, endDate: to, projects: config.projects });
+    const query = parseQuery({ organization: config.organization, startDate: from, endDate: to, projects: config.projects, timeZone: config.timeZone });
     const { breakdowns, minPatternSize, placeholders, synonyms } = await loadSettings();
     const report = await runAnalysis(query, { breakdowns, minPatternSize, placeholders, synonyms, mode: 'app', budgetMs: 240000 });
     let assignments;

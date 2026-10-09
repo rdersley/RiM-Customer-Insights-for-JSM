@@ -1,7 +1,7 @@
 import ResolverModule from '@forge/resolver';
 import { asUser, route } from '@forge/api';
 import { textOf } from './analysis.js';
-import { filterFor, organisationsOf, parseQuery, readJson, runAnalysis, searchPage } from './engine.js';
+import { filterFor, organisationsOf, parseQuery, pool, readJson, runAnalysis, searchPage } from './engine.js';
 import { licenseAllows, UNLICENSED_MESSAGE } from './license.js';
 import { exportBackupPage, importBackupBatch } from './backup.js';
 import { suggestMerges, summarise } from './ai.js';
@@ -10,6 +10,7 @@ import { deleteLive, deleteReport, listAlerts, loadAlert, loadLiveConfig, loadLi
 import { isLive, liveConfigFrom } from './live.js';
 import { queueAlertCheck, queueRefresh } from './liveJobs.js';
 import { organisationBreakdown, sanitizeSettings, selectableFields } from './settings.js';
+import { problemFields, problemRequest, relatesLinkType } from './problem.js';
 
 // This package is "type": "module"; Forge's bundler then hands CommonJS packages
 // over as their exports object, so the class sits on `.default`.
@@ -209,6 +210,7 @@ define('publishReport', async ({ payload, context }) => {
   const snapshot = snapshotFrom({ ...payload.snapshot, organization });
   const config = liveConfigFrom({
     ...payload?.live,
+    timeZone: payload?.timeZone,
     period: snapshot.period,
     approved: snapshot.patterns.filter((p) => p.title !== 'Other requests'),
     overview: snapshot.overview,
@@ -257,6 +259,11 @@ async function siteFields() {
 /** The id of the alert ticket's issue type, checked against the project. */
 async function alertIssueType({ projectKey, issueTypeName }) {
   if (!projectKey) throw new Error('Enter the key of the Jira project that alert tickets go to, such as SD.');
+  return issueTypeIn(projectKey, issueTypeName);
+}
+
+/** The id of a (non-subtask) issue type in a project, checked as the signed-in user. */
+async function issueTypeIn(projectKey, issueTypeName) {
   const response = await asUser().requestJira(route`/rest/api/3/issue/createmeta/${projectKey}/issuetypes?maxResults=100`, { headers: { Accept: 'application/json' } });
   if (response.status === 404) throw new Error(`Project ${projectKey} wasn’t found, or you can’t create tickets in it.`);
   const data = await readJson(response, 'Issue types');
@@ -265,6 +272,48 @@ async function alertIssueType({ projectKey, issueTypeName }) {
   if (!match) throw new Error(`Project ${projectKey} has no “${issueTypeName}” issue type. Available: ${types.map((t) => t.name).join(', ')}.`);
   return String(match.id);
 }
+
+// ---- Create problem from a recurring issue ------------------------------------
+// Created as the signed-in agent (their Jira permissions, shown as reporter).
+// Only structured details come from the page; the description is built here.
+
+define('createProblem', async ({ payload, context }) => {
+  if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
+  const request = problemRequest(payload);
+  const [issueTypeId, siteUrl] = await Promise.all([
+    issueTypeIn(request.projectKey, request.issueTypeName),
+    asUser().requestJira(route`/rest/api/3/serverInfo`, { headers: { Accept: 'application/json' } })
+      .then((r) => readJson(r, 'Server info')).then((i) => String(i.baseUrl || '').replace(/\/$/, '')).catch(() => ''),
+  ]);
+  const response = await asUser().requestJira(route`/rest/api/3/issue`, {
+    method: 'POST',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields: problemFields(request, issueTypeId, siteUrl) }),
+  });
+  const created = await readJson(response, 'Create problem');
+  let linked = 0;
+  let linkError = '';
+  if (request.link && request.keys.length) {
+    try {
+      const type = relatesLinkType(await readJson(await asUser().requestJira(route`/rest/api/3/issueLinkType`, { headers: { Accept: 'application/json' } }), 'Link types'));
+      if (!type) throw new Error('This site has no issue link types.');
+      const results = await pool(request.keys.map((key) => async () => {
+        const r = await asUser().requestJira(route`/rest/api/3/issueLink`, {
+          method: 'POST',
+          headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: { name: type.name }, inwardIssue: { key: key }, outwardIssue: { key: created.key } }),
+        });
+        return r.ok;
+      }), 4);
+      linked = results.filter(Boolean).length;
+      if (linked < request.keys.length) linkError = `${request.keys.length - linked} of ${request.keys.length} tickets couldn’t be linked (permissions or links switched off).`;
+    } catch (error) {
+      linkError = String(error.message || error).slice(0, 200);
+    }
+  }
+  console.log(`createProblem: ${created.key} in ${request.projectKey}, linked ${linked}/${request.link ? request.keys.length : 0}`);
+  return { key: created.key, url: siteUrl ? `${siteUrl}/browse/${created.key}` : '', linked, linkError };
+});
 
 define('getSettings', async ({ context }) => {
   if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);

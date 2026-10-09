@@ -132,3 +132,11 @@
 .ci-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 10px; border-radius: 12px; background: var(--nq-bg-neutral); color: var(--nq-text); font-size: var(--nq-font-size-sm, 13px); }
 .ci-chip button { border: 0; background: none; color: var(--nq-text-subtle); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 4px; }
 .ci-chip button:hover { color: var(--nq-text); }
+
+/* Create problem */
+.ci-problem { margin: 0 0 var(--nq-space-150); }
+.ci-problem__form { display: grid; gap: var(--nq-space-100); padding: var(--nq-space-150); border: 1px solid var(--nq-border); border-radius: var(--nq-radius-md, 8px); background: var(--nq-surface); }
+.ci-problem__fields { display: grid; grid-template-columns: 140px 160px minmax(0, 1fr); gap: var(--nq-space-150); }
+.ci-problem__fields .nq-field { margin: 0; }
+.ci-check { display: flex; align-items: center; gap: var(--nq-space-100); color: var(--nq-text); }
+@media (max-width: 900px) { .ci-problem__fields { grid-template-columns: minmax(0, 1fr); } }

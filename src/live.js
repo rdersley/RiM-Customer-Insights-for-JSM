@@ -6,6 +6,7 @@
 // Pure logic here; the Forge handlers are in liveJobs.js.
 import { median, patternTrend } from './analysis.js';
 import { presetRange, PRESETS } from './dates.js';
+import { validTimeZone } from './timeOfDay.js';
 import { LIVE_SCHEDULES } from './publish.js';
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -36,6 +37,8 @@ export function liveConfigFrom(input, { organization, projects = [], now = new D
     preset,
     schedule,
     ...(schedule === 'off' ? { period: { from, to } } : {}),
+    // The publishing agent's time zone: refreshes show customers when requests arrive in it.
+    timeZone: validTimeZone(input?.timeZone),
     approved: (Array.isArray(input?.approved) ? input.approved : [])
       .map((a) => ({ title: clip(a?.title, 80), summary: clip(a?.summary, 300) }))
       .filter((a) => a.title)
@@ -102,7 +105,7 @@ export function liveCounts(report, approved, assignments) {
  * comes from the organisation's own search (organizations = that org).
  */
 function detailsOf(groups, report) {
-  if (!groups.length) return { trend: null, medianHours: null, openShare: null, examples: [] };
+  if (!groups.length) return { trend: null, medianHours: null, openShare: null, examples: [], hours: null };
   const buckets = groups.every((g) => Array.isArray(g.buckets))
     ? groups.reduce((sum, g) => sum.map((n, i) => n + (g.buckets[i] || 0)), new Array(groups[0].buckets.length).fill(0))
     : null;
@@ -112,6 +115,7 @@ function detailsOf(groups, report) {
     trend: buckets ? patternTrend({ buckets }, report) : null,
     medianHours: median(groups.flatMap((g) => g.resolvedHours || [])),
     openShare: analysed ? Math.round((open / analysed) * 100) : null,
+    hours: groups.every((g) => Array.isArray(g.hours)) ? groups.reduce((sum, g) => sum.map((n, i) => n + (g.hours[i] || 0)), new Array(24).fill(0)) : null,
     examples: groups.flatMap((g) => g.tickets || [])
       .sort((a, b) => Date.parse(b.created) - Date.parse(a.created))
       .slice(0, EXAMPLES)
@@ -141,6 +145,7 @@ export function refreshedSnapshotInput(config, report, counts, now = new Date(),
     live: isLive(config) ? { preset: config.preset, schedule: config.schedule } : null,
     unreviewed: counts.unreviewed,
     resolution: report.resolution || null,
+    timeOfDay: report.timeOfDay ? { timeZone: report.timeOfDay.timeZone, grid: report.timeOfDay.grid, estimated: report.timeOfDay.estimated } : null,
     breakdowns: portalBreakdowns(report, options.breakdowns),
   };
 }

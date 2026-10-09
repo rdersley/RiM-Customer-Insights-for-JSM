@@ -1,7 +1,7 @@
 // "Export PDF": draws the report with jsPDF in the browser and downloads it
 // like the CSV. Content and wording come from src/pdfReport.js. jsPDF is
 // loaded on first use so the page itself stays small.
-import { pdfContent, pdfFileName, pdfSafe } from '../../../src/pdfReport.js';
+import { pdfContent, pdfFileName, pdfSafe, portalPdfContent, portalPdfFileName } from '../../../src/pdfReport.js';
 
 // A fixed light palette: the PDF is printed and shared, so it doesn't follow
 // the agent's screen theme. Colours match the UI kit's light tokens.
@@ -24,6 +24,9 @@ const changeColour = (text) => (text.startsWith('+') || text === 'New' ? MORE : 
 
 /** The PDF document for a report. `JsPdf` is jsPDF's constructor (tests pass it directly). */
 export function buildPdf(JsPdf, c, { product = 'Customer Insights', version = '' } = {}) {
+  // "Tickets" for agents; the portal says "Requests".
+  const noun = c.noun || 'Ticket';
+  const nouns = `${noun}s`;
   const doc = new JsPdf({ unit: 'mm', format: 'a4', compress: true });
   doc.setProperties({ title: pdfSafe(`${product}: ${c.title}, ${c.period}`), creator: pdfSafe(`${product} ${version}`.trim()) });
   let y = M;
@@ -101,7 +104,7 @@ export function buildPdf(JsPdf, c, { product = 'Customer Insights', version = ''
 
   // ---- Volume chart ------------------------------------------------------------
   if (c.volume.points.length) {
-    heading('Ticket activity');
+    heading(`${noun} activity`);
     const chartH = 38;
     room(chartH + 10);
     const points = c.volume.points;
@@ -122,13 +125,13 @@ export function buildPdf(JsPdf, c, { product = 'Customer Insights', version = ''
       if (i % every === 0) doc.text(p.date.slice(5), x + slot / 2, y + chartH + 4, { align: 'center' });
     });
     y += chartH + 6;
-    paragraph(`Tickets per ${c.volume.unit}.`, { size: 8, rgb: MUTED });
+    paragraph(`${nouns} per ${c.volume.unit}.`, { size: 8, rgb: MUTED });
   }
 
   // ---- Issues table ------------------------------------------------------------
   if (c.issues.length) {
     heading('Recurring issues');
-    const cols = [{ label: 'Tickets', x: 132 }, { label: 'Before', x: 150 }, { label: 'Change', x: 168 }, { label: 'Trend', x: W - M }];
+    const cols = [{ label: nouns, x: 132 }, { label: 'Before', x: 150 }, { label: 'Change', x: 168 }, { label: 'Trend', x: W - M }];
     const nameW = 112;
     const header = () => {
       font(8, 'bold', MUTED);
@@ -163,7 +166,7 @@ export function buildPdf(JsPdf, c, { product = 'Customer Insights', version = ''
   // ---- Example tickets -----------------------------------------------------------
   const withExamples = c.issues.filter((i) => i.examples.length);
   if (withExamples.length) {
-    heading('Example tickets');
+    heading(`Example ${nouns.toLowerCase()}`);
     for (const issue of withExamples) {
       room(lineHeight(10.5) + lineHeight(9) * 2);
       paragraph(issue.name, { size: 10.5, style: 'bold', gap: 0.5 });
@@ -183,7 +186,7 @@ export function buildPdf(JsPdf, c, { product = 'Customer Insights', version = ''
     const header = () => {
       font(8, 'bold', MUTED);
       doc.text(pdfSafe(b.label), M, y + 4);
-      doc.text('Tickets', 120, y + 4, { align: 'right' });
+      doc.text(nouns, 120, y + 4, { align: 'right' });
       doc.text('Change', 140, y + 4, { align: 'right' });
       doc.text('Resolution', 146, y + 4);
       y += 6; doc.setDrawColor(...RULE); doc.setLineWidth(0.3); doc.line(M, y, W - M, y); y += 1;
@@ -210,7 +213,7 @@ export function buildPdf(JsPdf, c, { product = 'Customer Insights', version = ''
   // ---- When tickets arrive ---------------------------------------------------------
   if (c.timeOfDay) {
     const t = c.timeOfDay;
-    heading('When tickets arrive');
+    heading(`When ${nouns.toLowerCase()} arrive`);
     paragraph(`Busiest hours ${t.busiestHours || '–'} · busiest day ${t.busiestDay} · ${t.outOfHours} outside 08:00–18:00 Mon–Fri. Times in ${t.timeZone}.`, { size: 9.5, gap: 3 });
     const labelW = 10;
     const cell = (CW - labelW) / 24;
@@ -250,11 +253,20 @@ export function buildPdf(JsPdf, c, { product = 'Customer Insights', version = ''
 
 /** Builds and downloads the PDF. Arguments are as for pdfContent, plus product and version. */
 export async function exportPdf({ product, version, ...args }) {
+  await download(pdfContent(args), pdfFileName(args.report), { product, version });
+}
+
+/** The customer portal's "Download PDF": the published report as customers see it. */
+export async function exportPortalPdf(snapshot, { product, version } = {}) {
+  await download(portalPdfContent(snapshot), portalPdfFileName(snapshot), { product, version });
+}
+
+async function download(content, fileName, options) {
   const { jsPDF } = await import('jspdf');
-  const doc = buildPdf(jsPDF, pdfContent(args), { product, version });
+  const doc = buildPdf(jsPDF, content, options);
   const link = document.createElement('a');
   link.href = URL.createObjectURL(doc.output('blob'));
-  link.download = pdfFileName(args.report);
+  link.download = fileName;
   link.click();
   setTimeout(() => URL.revokeObjectURL(link.href), 1000);
 }
