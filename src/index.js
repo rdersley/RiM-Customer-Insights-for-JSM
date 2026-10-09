@@ -57,8 +57,8 @@ const ALERTS_SHOWN = 20;
 
 define('getAlerts', async ({ context }) => {
   if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
-  const { alerts: config } = await loadSettings();
-  if (!config?.enabled) return { enabled: false, alerts: [] };
+  const { alerts: config, surge } = await loadSettings();
+  if (!config?.enabled && !surge?.enabled) return { enabled: false, alerts: [] };
   const [visible, alerts] = await Promise.all([listOrganizations(), listAlerts()]);
   const ids = new Set(visible.map((o) => o.id));
   return { enabled: true, alerts: alerts.filter((a) => !a.dismissedAt && ids.has(a.organization.id)).slice(0, ALERTS_SHOWN) };
@@ -351,6 +351,7 @@ define('saveSettings', async ({ payload, context }) => {
   const [fields, organizations] = await Promise.all([siteFields(), listOrganizations()]);
   const settings = sanitizeSettings(payload?.settings, fields, organizations);
   if (settings.alerts.createIssue) settings.alerts.issueTypeId = await alertIssueType(settings.alerts);
+  if (settings.surge.enabled && settings.surge.createIssue) settings.surge.issueTypeId = await alertIssueType(settings.surge);
   await saveSettings(settings);
   const { alerts } = settings;
   console.log(`saveSettings: ${settings.breakdowns.length} breakdowns, portal ${settings.portalEnabled ? 'on' : 'off'}, alerts ${alerts.enabled ? `on (${alerts.organizations.length} orgs, tickets ${alerts.createIssue ? alerts.projectKey : 'off'})` : 'off'}`);
