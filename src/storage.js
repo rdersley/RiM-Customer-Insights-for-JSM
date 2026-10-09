@@ -87,6 +87,23 @@ export async function saveAlert(alert) {
   await (await kvs()).set(alertKey(alert.id), alert);
 }
 
+/** Merges a change into a stored alert (surges grow while they last). */
+export async function updateAlert(id, change) {
+  const alert = await loadAlert(id);
+  if (alert) await saveAlert({ ...alert, ...change });
+}
+
+// Live surge detection (src/surge.js): open surges per organisation.
+const surgeStateKey = (orgId) => `surge-state:${String(orgId).replace(/D/g, '')}`;
+
+export async function loadSurgeState(orgId) {
+  return (await (await kvs()).get(surgeStateKey(orgId))) || {};
+}
+
+export async function saveSurgeState(orgId, state) {
+  await (await kvs()).set(surgeStateKey(orgId), state);
+}
+
 export async function loadAlert(id) {
   return (await (await kvs()).get(alertKey(id))) || null;
 }

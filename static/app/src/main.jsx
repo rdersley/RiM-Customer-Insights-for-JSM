@@ -13,6 +13,7 @@ import { crewRates } from '../../../src/headcount.js';
 import { applyMerges, categoriesOf, median, patternTrend, topShares } from '../../../src/analysis.js';
 import { jqlClause, jqlEmptyClause } from '../../../src/settings.js';
 import { changeText } from '../../../src/alertText.js';
+import { surgeText } from '../../../src/surge.js';
 import { duration, sparkPath, trendWord } from '../../../src/trend.js';
 import { DAYS, hoursOf, outOfHoursShare, peakWindow, WORKING, windowText } from '../../../src/timeOfDay.js';
 
@@ -124,6 +125,15 @@ function App() {
     }).catch((e) => setError(e.message || 'Could not load customer organisations.'))
       .finally(() => setLoadingOrgs(false));
   }, []);
+
+  // Live surges are checked every 5 minutes; keep the list current while the page is open.
+  useEffect(() => {
+    if (!licensed) return undefined;
+    const timer = setInterval(() => { invoke('getAlerts').then((a) => setAlerts(a?.alerts || [])).catch(() => {}); }, 120000);
+    return () => clearInterval(timer);
+  }, [licensed]);
+  const surges = alerts.filter((a) => a.kind === 'surge');
+  const spikes = alerts.filter((a) => a.kind !== 'surge');
 
   // "Analyse" on an alert fills in the form; the run starts once the choices apply.
   useEffect(() => {
@@ -515,11 +525,32 @@ function App() {
       Analysis is unavailable until the app has an active Marketplace licence. Ask a Jira admin to check it in Manage apps.
     </Notice>}
 
-    {licensed && alerts.length > 0 && <Card
-      title={<>Spike alerts <span className="nq-pill nq-pill--neutral">{alerts.length}</span></>}
+    {licensed && surges.length > 0 && <Card accent
+      title={<>Live surges <span className="nq-pill nq-pill--neutral">{surges.length}</span></>}
+      description="Lots of tickets about the same issue arriving at once from a watched organisation. Checked every 5 minutes; check the tickets before alerting anyone."
+    >
+      <ul className="ci-alerts">{surges.map((alert) => <li key={alert.id}>
+        <div className="ci-alerts__text">
+          <strong><Lozenge kind="danger">Surge</Lozenge> {alert.organization.name}: {alert.theme}</strong>
+          <span className="nq-muted">{surgeText({ ...alert.surge, count: alert.count, bases: { length: alert.surge.bases } })} · since {new Date(alert.surge.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}{alert.surge.updatedAt !== alert.surge.startedAt ? `, last ticket added ${new Date(alert.surge.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
+          <span className="ci-alerts__links">
+            {alert.keys?.length > 0 && <JiraLink href={jiraSearch(`key in (${alert.keys.slice(0, MAX_LINK_KEYS).join(', ')}) ORDER BY created DESC`)}>Open {Math.min(alert.keys.length, MAX_LINK_KEYS)} tickets in Jira</JiraLink>}
+            {alert.issueKey && <> · Incident <JiraLink href={siteUrl ? `${siteUrl}/browse/${alert.issueKey}` : ''}>{alert.issueKey}</JiraLink> <span className="nq-muted">(send a System Alert from there)</span></>}
+            {alert.issueError && <> · <Lozenge kind="warning">Incident not created</Lozenge> <span className="nq-muted">{alert.issueError}</span></>}
+          </span>
+        </div>
+        <div className="ci-alerts__actions">
+          <Button small onClick={() => analyseAlert(alert)} disabled={loadingReport || !orgs.some((o) => o.id === alert.organization.id)}>Analyse today</Button>
+          <Button small appearance="subtle" onClick={() => dismissAlert(alert)}>Dismiss</Button>
+        </div>
+      </li>)}</ul>
+    </Card>}
+
+    {licensed && spikes.length > 0 && <Card
+      title={<>Spike alerts <span className="nq-pill nq-pill--neutral">{spikes.length}</span></>}
       description="Patterns that jumped in a watched organisation’s last 7 days, against the 7 before. Checked once a day."
     >
-      <ul className="ci-alerts">{alerts.map((alert) => <li key={alert.id}>
+      <ul className="ci-alerts">{spikes.map((alert) => <li key={alert.id}>
         <div className="ci-alerts__text">
           <strong>{alert.organization.name}: {alert.theme}</strong>
           <span className="nq-muted">{changeText(alert)} · {new Date(`${alert.window.from}T00:00:00`).toLocaleDateString()} to {new Date(`${alert.window.to}T00:00:00`).toLocaleDateString()}</span>

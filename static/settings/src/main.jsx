@@ -11,6 +11,7 @@ import { version } from '../../../package.json';
 import { ALERT_LIMITS, DEFAULT_ALERTS, DEFAULT_PLACEHOLDERS, DEFAULT_SYNONYMS, MAX_BREAKDOWNS, MAX_PLACEHOLDERS, MAX_WATCHED, MIN_PATTERN, SYNONYM_LIMITS } from '../../../src/settings.js';
 import BackupRestore from './BackupRestore.jsx';
 import CrewNumbers from './CrewNumbers.jsx';
+import SurgeSettings from './SurgeSettings.jsx';
 import './styles.css';
 
 enableTheme(view);
@@ -189,6 +190,9 @@ function App() {
           </>}
         </div>
       </Card>
+
+      <SurgeSettings value={draft.surge} organizations={state.organizations || []} breakdowns={state.settings.breakdowns} fields={state.fields || []}
+        onChange={(surge) => { setSaved(false); setDraft((d) => ({ ...d, surge })); }} />
 
       <Card title="Customer portal" description="Let Jira admins and project admins publish reviewed reports that customers see under “Service report” in the portal.">
         <label className="cs-check">

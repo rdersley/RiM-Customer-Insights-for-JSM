@@ -39,6 +39,10 @@ modules:
     - key: live-reports-hourly
       function: live-scheduler
       interval: hour
+    # Live surge detection (src/surgeJobs.js); does nothing until switched on.
+    - key: surge-check
+      function: surge-check
+      interval: fiveMinute
   consumer:
     - key: live-report-consumer
       queue: live-report-refresh
@@ -54,6 +58,9 @@ modules:
     - key: live-refresh
       handler: liveJobs.consumer
       timeoutSeconds: 900
+    - key: surge-check
+      handler: surgeJobs.scheduler
+      timeoutSeconds: 120
   # Atlassian-hosted Claude for the opt-in AI summary (src/ai.js).
   llm:
     - key: insights-llm
