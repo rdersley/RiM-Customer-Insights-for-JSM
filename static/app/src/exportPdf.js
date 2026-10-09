@@ -128,6 +128,39 @@ export function buildPdf(JsPdf, c, { product = 'Customer Insights', version = ''
     paragraph(`${nouns} per ${c.volume.unit}.`, { size: 8, rgb: MUTED });
   }
 
+  // ---- Categories (AI) ----------------------------------------------------------
+  if (c.categories?.length) {
+    heading('Issue categories');
+    const cols = [{ label: 'Share', x: 132 }, { label: nouns, x: 150 }, { label: 'Before', x: 168 }, { label: 'Change', x: W - M }];
+    const nameW = 112;
+    const header = () => {
+      font(8, 'bold', MUTED);
+      doc.text('Category', M, y + 4);
+      cols.forEach((col) => doc.text(col.label, col.x, y + 4, { align: 'right' }));
+      y += 6; doc.setDrawColor(...RULE); doc.setLineWidth(0.3); doc.line(M, y, W - M, y); y += 1.5;
+    };
+    header();
+    onNewPage = header;
+    for (const cat of c.categories) {
+      font(10, 'bold');
+      const name = split(cat.title, nameW);
+      font(8, 'normal', MUTED);
+      const details = split(cat.patterns, nameW);
+      room(name.length * lineHeight(10) + details.length * lineHeight(8) + 3);
+      font(10, 'bold'); write(name, M, 10);
+      const base = y + lineHeight(10) * 0.78;
+      font(9, 'normal', MUTED); doc.text(pdfSafe(cat.share), cols[0].x, base, { align: 'right' });
+      font(10, 'normal'); doc.text(pdfSafe(cat.count), cols[1].x, base, { align: 'right' });
+      font(10, 'normal', MUTED); doc.text(pdfSafe(cat.previous), cols[2].x, base, { align: 'right' });
+      font(10, 'bold', changeColour(cat.change)); doc.text(pdfSafe(cat.change), cols[3].x, base, { align: 'right' });
+      y += name.length * lineHeight(10);
+      font(8, 'normal', MUTED); write(details, M, 8);
+      y += details.length * lineHeight(8) + 1.5;
+      doc.setDrawColor(...RULE); doc.setLineWidth(0.2); doc.line(M, y, W - M, y); y += 1.5;
+    }
+    onNewPage = null;
+  }
+
   // ---- Issues table ------------------------------------------------------------
   if (c.issues.length) {
     heading('Recurring issues');

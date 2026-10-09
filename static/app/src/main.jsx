@@ -3,12 +3,12 @@ import { createRoot } from 'react-dom/client';
 import { invoke, router, view } from '@forge/bridge';
 import '@retailinmotion/ui/css';
 import { enableTheme } from '@retailinmotion/ui/theme';
-import { AppHeader, Button, Card, EmptyState, Field, Footer, Kpi, Loading, Lozenge, Notice } from '@retailinmotion/ui/react';
+import { AppHeader, Button, Card, EmptyState, Field, Footer, Kpi, Loading, Lozenge, Notice, Tabs } from '@retailinmotion/ui/react';
 import { version } from '../../../package.json';
 import { localIso, matchPreset, presetRange, PRESETS } from '../../../src/dates.js';
 import { analyseEveryTicket, Cancelled, FULL_LIMIT } from './fullAnalysis.js';
 import { exportPdf } from './exportPdf.js';
-import { applyMerges, median, patternTrend, topShares } from '../../../src/analysis.js';
+import { applyMerges, categoriesOf, median, patternTrend, topShares } from '../../../src/analysis.js';
 import { jqlClause, jqlEmptyClause } from '../../../src/settings.js';
 import { changeText } from '../../../src/alertText.js';
 import { duration, sparkPath, trendWord } from '../../../src/trend.js';
@@ -95,6 +95,7 @@ function App() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState('');
   const [aiStep, setAiStep] = useState('');
+  const [patternView, setPatternView] = useState('categories');
   const [filter, setFilter] = useState(null); // drill-down: { id, label, value }
   const [siteUrl, setSiteUrl] = useState('');
   const [alerts, setAlerts] = useState([]);
@@ -290,7 +291,8 @@ function App() {
     if (range) { setFrom(range.from); setTo(range.to); }
   }
 
-  // Two calls, each inside Forge's 25s limit: merge same-issue groups, then name and summarise.
+  // Three calls, each inside Forge's 25s limit: merge same-issue groups, sort
+  // them into broad categories, then name and summarise.
   async function runAi() {
     setAiLoading(true); setAiError('');
     try {
@@ -304,9 +306,18 @@ function App() {
       } catch (e) {
         setAiError(`Similar patterns couldn’t be merged (${e.message || 'AI error'}); the summary uses the patterns as found.`);
       }
+      setAiStep('categorise');
+      let categories = [];
+      try {
+        const result = await invoke('aiCategorise', { report: { ...report, groups: merged } });
+        categories = result.categories.length > 1 ? categoriesOf(merged, result.categories) : [];
+      } catch (e) {
+        console.log(`AI categories failed: ${e.message}`);
+      }
       setAiStep('summary');
-      const summary = await invoke('aiSummary', { report: { ...report, groups: merged } });
-      setAi({ ...summary, groups: merged, mergedIssues, mergedGroups: report.groups.length - merged.length });
+      const summary = await invoke('aiSummary', { report: { ...report, groups: merged, categories } });
+      setAi({ ...summary, groups: merged, categories, mergedIssues, mergedGroups: report.groups.length - merged.length });
+      setPatternView('categories');
     } catch (e) { setAiError(e.message || 'The AI summary could not be created.'); }
     finally { setAiLoading(false); setAiStep(''); }
   }
@@ -327,8 +338,13 @@ function App() {
     if (!report) return;
     const rows = [['Customer', report.organization], ['Period', `${report.startDate} to ${report.endDate}`]];
     if (ai?.overview) rows.push(['AI overview', ai.overview]);
-    rows.push([], ['Pattern', 'AI name', 'Ticket count', 'Previous period', 'Change', 'Trend', 'Example ticket']);
-    groups.forEach((group, index) => rows.push([group.theme, aiPattern(index)?.title || '', group.count, group.previousCount, group.changePercent === null ? 'New' : `${group.changePercent}%`, trendWord(patternTrend(group, report)), group.tickets[0]?.key || '']));
+    if (hasCategories) {
+      rows.push([], ['Category', 'Ticket count', 'Previous period', 'Change', 'Patterns']);
+      for (const c of ai.categories) rows.push([c.title, c.count, c.previousCount, c.changePercent === null ? 'New' : `${c.changePercent}%`, c.members.length]);
+    }
+    const categoryOf = new Map((hasCategories ? ai.categories : []).flatMap((c) => c.members.map((i) => [i, c.title])));
+    rows.push([], ['Pattern', 'AI name', 'Category', 'Ticket count', 'Previous period', 'Change', 'Trend', 'Example ticket']);
+    groups.forEach((group, index) => rows.push([group.theme, aiPattern(index)?.title || '', categoryOf.get(index) || '', group.count, group.previousCount, group.changePercent === null ? 'New' : `${group.changePercent}%`, trendWord(patternTrend(group, report)), group.tickets[0]?.key || '']));
     if (report.timeOfDay) {
       rows.push([], [`Tickets by hour (${report.timeOfDay.timeZone})`, ...DAYS]);
       for (let h = 0; h < 24; h += 1) rows.push([`${String(h).padStart(2, '0')}:00`, ...report.timeOfDay.grid.map((row) => row[h])]);
@@ -379,6 +395,95 @@ function App() {
   };
 
   const periodDays = report ? Math.max(1, Math.ceil((Date.parse(report.endDate) - Date.parse(report.startDate)) / 86400000) + 1) : 0;
+
+  // AI categories (after "Summarise with AI"): broad areas with the patterns underneath.
+  const hasCategories = ai?.categories?.length > 1;
+  const showCategories = hasCategories ? patternView === 'categories' : null;
+  const patternTickets = Math.max(1, groups.reduce((n, g) => n + g.count, 0));
+  const maxCategory = Math.max(1, ...(ai?.categories || []).map((c) => c.count));
+
+  const renderPattern = (group, index) => <details className="ci-pattern" key={group.id}>
+            <summary>
+              <span className="ci-pattern__title">
+                <strong>{patternName(group, index)}</strong>
+                {(aiPattern(index) || group.ruleNames) && <small className="nq-muted">
+                  {group.mergedFrom ? `Combines ${group.mergedFrom.length}: ${group.mergedFrom.join(' · ')}` : (group.ruleNames?.[0] || group.theme)}
+                  {aiPattern(index)?.coherent === false && <> · <Lozenge kind="warning">Mixed</Lozenge></>}
+                </small>}
+              </span>
+              <span className="ci-pattern__sample nq-muted">
+                {aiPattern(index)?.summary || group.sampleSummary}
+                {whereOf(group) && <em className="ci-where">{whereOf(group)}</em>}
+              </span>
+              <span className="ci-pattern__volume">
+                <Sparkline points={patternTrend(group, report)} unit={bucketUnit} />
+                <span className="ci-meter"><i style={{ width: `${Math.max(8, (group.count / maxGroup) * 100)}%` }} /></span>
+              </span>
+              <span className="ci-pattern__count" title={group.estimated ? `${group.sampleCount} in the sample` : undefined}>{group.estimated ? '≈' : ''}{group.count}</span>
+              <TrendLozenge group={group} />
+              <span className="ci-pattern__chevron" aria-hidden="true">›</span>
+            </summary>
+            <div className="nq-spread ci-pattern__meta">
+              <span className="nq-muted">
+                {trendWord(patternTrend(group, report)) && <>{trendWord(patternTrend(group, report))} through the period · </>}
+                {peakWindow(group.hours) && <>mostly {windowText(peakWindow(group.hours))} ({peakWindow(group.hours).share}%) · </>}
+                {resolutionText(groupResolution(group))}{group.estimated ? ' (from the sample)' : ''}
+              </span>
+              {patternLink(group) && <JiraLink href={patternLink(group)}>
+                {(() => {
+                  const n = Math.min((group.keys || group.tickets).length, MAX_LINK_KEYS);
+                  return group.estimated ? `Open the ${n} sampled tickets in Jira` : `Open ${n} tickets in Jira`;
+                })()}
+              </JiraLink>}
+            </div>
+            <div className="ci-problem">
+              {problems[group.id]
+                ? <Notice kind="success">
+                  Problem <JiraLink href={problems[group.id].url}>{problems[group.id].key}</JiraLink> created{problems[group.id].linked ? `, linked to ${problems[group.id].linked} tickets` : ''}.
+                  {problems[group.id].linkError && <> {problems[group.id].linkError}</>}
+                </Notice>
+                : problemForm?.groupId === group.id
+                  ? <div className="ci-problem__form">
+                    <div className="ci-problem__fields">
+                      <Field label="Project key" htmlFor={`ci-prb-project-${index}`}>
+                        <input id={`ci-prb-project-${index}`} className="nq-input" maxLength={50} value={problemForm.projectKey} placeholder="e.g. PRB"
+                          onChange={(e) => setProblemForm((f) => ({ ...f, projectKey: e.target.value.toUpperCase() }))} />
+                      </Field>
+                      <Field label="Issue type" htmlFor={`ci-prb-type-${index}`}>
+                        <input id={`ci-prb-type-${index}`} className="nq-input" maxLength={60} value={problemForm.issueTypeName}
+                          onChange={(e) => setProblemForm((f) => ({ ...f, issueTypeName: e.target.value }))} />
+                      </Field>
+                      <Field label="Summary" htmlFor={`ci-prb-summary-${index}`}>
+                        <input id={`ci-prb-summary-${index}`} className="nq-input" maxLength={250} value={problemForm.summary}
+                          onChange={(e) => setProblemForm((f) => ({ ...f, summary: e.target.value }))} />
+                      </Field>
+                    </div>
+                    <label className="ci-check">
+                      <input type="checkbox" className="nq-check" checked={problemForm.link} onChange={(e) => setProblemForm((f) => ({ ...f, link: e.target.checked }))} />
+                      <span>Link the {Math.min(20, (group.keys || []).length)} newest example tickets to the problem</span>
+                    </label>
+                    {problemForm.error && <Notice kind="error">{problemForm.error}</Notice>}
+                    <div className="nq-inline">
+                      <Button small appearance="primary" disabled={creatingProblem || !problemForm.projectKey.trim() || !problemForm.summary.trim()} onClick={() => createProblem(group, index)}>
+                        {creatingProblem ? 'Creating…' : 'Create problem'}
+                      </Button>
+                      <Button small appearance="subtle" disabled={creatingProblem} onClick={() => setProblemForm(null)}>Cancel</Button>
+                    </div>
+                  </div>
+                  : <Button small onClick={() => openProblemForm(group, index)}>Create problem</Button>}
+            </div>
+            <div className="nq-table-wrap">
+              <table className="nq-table">
+                <thead><tr><th>Key</th><th>Summary</th><th>Status</th><th>Created</th></tr></thead>
+                <tbody>{group.tickets.map((ticket) => <tr key={ticket.key}>
+                  <td><JiraLink className="nq-table__key" href={ticketLink(ticket)}>{ticket.key}</JiraLink></td>
+                  <td>{ticket.summary}</td>
+                  <td><Lozenge>{ticket.status}</Lozenge></td>
+                  <td>{new Date(ticket.created).toLocaleDateString()}</td>
+                </tr>)}</tbody>
+              </table>
+            </div>
+          </details>;
 
   return <div className="nq-page">
     <AppHeader
@@ -501,8 +606,8 @@ function App() {
         footer={ai && <span className="nq-muted">AI-generated from the pattern names, counts and example summaries above. Check the linked tickets before sharing.</span>}
       >
         {aiError && <Notice kind="error" title="The AI summary didn’t work.">{aiError}</Notice>}
-        {aiLoading && <Loading inline text={aiStep === 'merge' ? 'Finding patterns that are the same issue…' : 'Naming the issues and writing a summary…'} />}
-        {!ai && !aiLoading && !aiError && <p className="nq-muted">Get plain-English names for the top patterns, an overview for a customer review and suggested follow-ups.</p>}
+        {aiLoading && <Loading inline text={aiStep === 'merge' ? 'Finding patterns that are the same issue…' : aiStep === 'categorise' ? 'Sorting the issues into categories…' : 'Naming the issues and writing a summary…'} />}
+        {!ai && !aiLoading && !aiError && <p className="nq-muted">Get plain-English names for the top patterns, broad categories, an overview for a customer review and suggested follow-ups.</p>}
         {ai && !aiLoading && <div className="nq-stack">
           {ai.mergedIssues > 0 && <p className="nq-muted">Combined {ai.mergedGroups + ai.mergedIssues} patterns that describe the same issue into {ai.mergedIssues}. Expand a pattern to see what it combines.</p>}
           {ai.overview && <p className="ci-ai__overview">{ai.overview}</p>}
@@ -641,89 +746,24 @@ function App() {
         {report.cutShort && <Notice kind="warning">
           The analysis stopped fetching early to stay within Jira’s time limit, so the sample is smaller than usual. Try a shorter period or a project filter.
         </Notice>}
+        {showCategories !== null && <Tabs items={[{ id: 'categories', label: `By category (${ai.categories.length})` }, { id: 'patterns', label: `All patterns (${groups.length})` }]} active={patternView} onChange={setPatternView} />}
         {groups.length
-          ? <div className="ci-patterns">{groups.map((group, index) => <details className="ci-pattern" key={group.id}>
-            <summary>
-              <span className="ci-pattern__title">
-                <strong>{patternName(group, index)}</strong>
-                {(aiPattern(index) || group.ruleNames) && <small className="nq-muted">
-                  {group.mergedFrom ? `Combines ${group.mergedFrom.length}: ${group.mergedFrom.join(' · ')}` : (group.ruleNames?.[0] || group.theme)}
-                  {aiPattern(index)?.coherent === false && <> · <Lozenge kind="warning">Mixed</Lozenge></>}
-                </small>}
-              </span>
-              <span className="ci-pattern__sample nq-muted">
-                {aiPattern(index)?.summary || group.sampleSummary}
-                {whereOf(group) && <em className="ci-where">{whereOf(group)}</em>}
-              </span>
-              <span className="ci-pattern__volume">
-                <Sparkline points={patternTrend(group, report)} unit={bucketUnit} />
-                <span className="ci-meter"><i style={{ width: `${Math.max(8, (group.count / maxGroup) * 100)}%` }} /></span>
-              </span>
-              <span className="ci-pattern__count" title={group.estimated ? `${group.sampleCount} in the sample` : undefined}>{group.estimated ? '≈' : ''}{group.count}</span>
-              <TrendLozenge group={group} />
-              <span className="ci-pattern__chevron" aria-hidden="true">›</span>
-            </summary>
-            <div className="nq-spread ci-pattern__meta">
-              <span className="nq-muted">
-                {trendWord(patternTrend(group, report)) && <>{trendWord(patternTrend(group, report))} through the period · </>}
-                {peakWindow(group.hours) && <>mostly {windowText(peakWindow(group.hours))} ({peakWindow(group.hours).share}%) · </>}
-                {resolutionText(groupResolution(group))}{group.estimated ? ' (from the sample)' : ''}
-              </span>
-              {patternLink(group) && <JiraLink href={patternLink(group)}>
-                {(() => {
-                  const n = Math.min((group.keys || group.tickets).length, MAX_LINK_KEYS);
-                  return group.estimated ? `Open the ${n} sampled tickets in Jira` : `Open ${n} tickets in Jira`;
-                })()}
-              </JiraLink>}
-            </div>
-            <div className="ci-problem">
-              {problems[group.id]
-                ? <Notice kind="success">
-                  Problem <JiraLink href={problems[group.id].url}>{problems[group.id].key}</JiraLink> created{problems[group.id].linked ? `, linked to ${problems[group.id].linked} tickets` : ''}.
-                  {problems[group.id].linkError && <> {problems[group.id].linkError}</>}
-                </Notice>
-                : problemForm?.groupId === group.id
-                  ? <div className="ci-problem__form">
-                    <div className="ci-problem__fields">
-                      <Field label="Project key" htmlFor={`ci-prb-project-${index}`}>
-                        <input id={`ci-prb-project-${index}`} className="nq-input" maxLength={50} value={problemForm.projectKey} placeholder="e.g. PRB"
-                          onChange={(e) => setProblemForm((f) => ({ ...f, projectKey: e.target.value.toUpperCase() }))} />
-                      </Field>
-                      <Field label="Issue type" htmlFor={`ci-prb-type-${index}`}>
-                        <input id={`ci-prb-type-${index}`} className="nq-input" maxLength={60} value={problemForm.issueTypeName}
-                          onChange={(e) => setProblemForm((f) => ({ ...f, issueTypeName: e.target.value }))} />
-                      </Field>
-                      <Field label="Summary" htmlFor={`ci-prb-summary-${index}`}>
-                        <input id={`ci-prb-summary-${index}`} className="nq-input" maxLength={250} value={problemForm.summary}
-                          onChange={(e) => setProblemForm((f) => ({ ...f, summary: e.target.value }))} />
-                      </Field>
-                    </div>
-                    <label className="ci-check">
-                      <input type="checkbox" className="nq-check" checked={problemForm.link} onChange={(e) => setProblemForm((f) => ({ ...f, link: e.target.checked }))} />
-                      <span>Link the {Math.min(20, (group.keys || []).length)} newest example tickets to the problem</span>
-                    </label>
-                    {problemForm.error && <Notice kind="error">{problemForm.error}</Notice>}
-                    <div className="nq-inline">
-                      <Button small appearance="primary" disabled={creatingProblem || !problemForm.projectKey.trim() || !problemForm.summary.trim()} onClick={() => createProblem(group, index)}>
-                        {creatingProblem ? 'Creating…' : 'Create problem'}
-                      </Button>
-                      <Button small appearance="subtle" disabled={creatingProblem} onClick={() => setProblemForm(null)}>Cancel</Button>
-                    </div>
-                  </div>
-                  : <Button small onClick={() => openProblemForm(group, index)}>Create problem</Button>}
-            </div>
-            <div className="nq-table-wrap">
-              <table className="nq-table">
-                <thead><tr><th>Key</th><th>Summary</th><th>Status</th><th>Created</th></tr></thead>
-                <tbody>{group.tickets.map((ticket) => <tr key={ticket.key}>
-                  <td><JiraLink className="nq-table__key" href={ticketLink(ticket)}>{ticket.key}</JiraLink></td>
-                  <td>{ticket.summary}</td>
-                  <td><Lozenge>{ticket.status}</Lozenge></td>
-                  <td>{new Date(ticket.created).toLocaleDateString()}</td>
-                </tr>)}</tbody>
-              </table>
-            </div>
-          </details>)}</div>
+          ? showCategories
+            ? <div className="ci-categories">{ai.categories.map((c) => <details className="ci-category" key={c.title}>
+              <summary>
+                <span className="ci-pattern__title">
+                  <strong>{c.title}</strong>
+                  <small className="nq-muted">{c.members.length} {c.members.length === 1 ? 'pattern' : 'patterns'}: {c.members.slice(0, 3).map((i) => patternName(groups[i], i)).join(' · ')}{c.members.length > 3 ? ' …' : ''}</small>
+                </span>
+                <span className="ci-category__share nq-muted">{Math.round((c.count / patternTickets) * 100)}% of pattern tickets</span>
+                <span className="ci-meter"><i style={{ width: `${Math.max(8, (c.count / maxCategory) * 100)}%` }} /></span>
+                <span className="ci-pattern__count">{c.estimated ? '≈' : ''}{c.count}</span>
+                <TrendLozenge group={c} />
+                <span className="ci-pattern__chevron" aria-hidden="true">›</span>
+              </summary>
+              <div className="ci-patterns ci-category__patterns">{c.members.map((i) => renderPattern(groups[i], i))}</div>
+            </details>)}</div>
+            : <div className="ci-patterns">{groups.map(renderPattern)}</div>
           : <EmptyState compact title="No repeated issue patterns detected">There are no groups of similar tickets with more than one request in this period.</EmptyState>}
       </Card>
 

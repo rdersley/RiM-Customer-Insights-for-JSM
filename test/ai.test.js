@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { aiInput, assignToApproved, parseAssignments, parseInsights, parseMerges, suggestMerges, summarise } from '../src/ai.js';
-import { applyMerges } from '../src/analysis.js';
+import { aiInput, assignToApproved, MAX_CATEGORIES, parseAssignments, parseInsights, parseMerges, suggestCategories, suggestMerges, summarise } from '../src/ai.js';
+import { applyMerges, categoriesOf } from '../src/analysis.js';
 
 const report = {
   organization: 'Ryanair Crew', startDate: '2026-06-01', endDate: '2026-08-31', currentCount: 6793, previousCount: 4484,
@@ -156,4 +156,54 @@ test('summarise stops on errors that are not about the model', async () => {
   const chatFn = async () => { count += 1; throw new Error('Rate limited'); };
   await assert.rejects(summarise(report, { chatFn, models: ['a', 'b'] }), /Rate limited/);
   assert.equal(count, 1);
+});
+
+const deviceGroups = [
+  { theme: 'Vpos stuck', count: 194, previousCount: 58, tickets: [{ summary: 'RYR - EDI - VPOS STUCK' }] },
+  { theme: 'Vpos crash', count: 138, previousCount: 75, estimated: true, tickets: [{ summary: 'RYR - VPOS CRASH' }] },
+  { theme: 'Pinpad connection', count: 93, previousCount: 72, tickets: [{ summary: 'Blue Pad Connection' }] },
+  { theme: 'Pair pinpad', count: 47, previousCount: 75, tickets: [{ summary: 'Pair pin pad with vpos' }] },
+  { theme: 'Missing product', count: 61, previousCount: 5, tickets: [{ summary: 'Missing Product' }] },
+];
+
+test('suggestCategories forces the category tool and validates indexes', async () => {
+  let prompt;
+  const chatFn = async (p) => {
+    prompt = p;
+    return { choices: [{ message: { tool_calls: [{ function: { name: 'categorise_patterns', arguments: JSON.stringify({ categories: [
+      { title: 'vPOS app', members: [0, 1, 99] },
+      { title: 'Payment devices', members: [2, 3, 0] },
+    ] }) } }] } }] };
+  };
+  const result = await suggestCategories({ groups: deviceGroups, synonyms: [['pinpad', 'bluepad']] }, { chatFn, models: ['claude-sonnet-5'] });
+  assert.equal(prompt.tool_choice.function.name, 'categorise_patterns');
+  assert.match(prompt.messages[1].content, /"pinpad","bluepad"/);
+  assert.equal(JSON.parse(prompt.messages[1].content.split('Patterns as JSON:\n')[1]).length, 5);
+  assert.deepEqual(result.categories, [{ title: 'vPOS app', members: [0, 1] }, { title: 'Payment devices', members: [2, 3] }]);
+  assert.ok(MAX_CATEGORIES >= 8);
+});
+
+test('suggestCategories skips the call for fewer than three patterns', async () => {
+  const result = await suggestCategories({ groups: deviceGroups.slice(0, 2) }, { chatFn: async () => { throw new Error('called'); } });
+  assert.deepEqual(result, { categories: [], model: null });
+});
+
+test('categories total their patterns; anything left out goes under Other', () => {
+  const categories = categoriesOf(deviceGroups, [{ title: 'Payment devices', members: [3, 2] }, { title: 'vPOS app', members: [0, 1, 2] }]);
+  assert.deepEqual(categories.map((c) => [c.title, c.count, c.previousCount, c.members]), [
+    ['vPOS app', 332, 133, [0, 1]],
+    ['Payment devices', 140, 147, [2, 3]],
+    ['Other', 61, 5, [4]],
+  ]);
+  assert.equal(categories[0].estimated, true);
+  assert.equal(categories[0].changePercent, 150);
+  assert.equal(categories[1].change, -7);
+  // The AI's own "Other" takes the leftovers.
+  assert.deepEqual(categoriesOf(deviceGroups, [{ title: 'Devices', members: [0, 1, 2, 3] }, { title: 'other', members: [] }]).map((c) => c.title), ['Devices', 'other']);
+});
+
+test('the summary prompt gets category totals', () => {
+  const input = aiInput({ ...report, categories: categoriesOf(deviceGroups, [{ title: 'vPOS app', members: [0, 1] }]) });
+  assert.deepEqual(input.categories[0], { name: 'vPOS app', tickets: 332, previousPeriodTickets: 133, patterns: 2 });
+  assert.deepEqual(aiInput(report).categories, []);
 });

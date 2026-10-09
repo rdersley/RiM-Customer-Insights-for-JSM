@@ -69,6 +69,17 @@ export function pdfContent({ report, groups = report?.groups || [], ai = null, g
     examples: index < PDF_DETAILS ? (group.tickets || []).slice(0, PDF_EXAMPLES).map((t) => ({ key: t.key, summary: t.summary, status: t.status })) : [],
   }));
 
+  // AI categories ("Summarise with AI"): member indexes refer to `groups`.
+  const inPatterns = Math.max(1, groups.reduce((n, g) => n + g.count, 0));
+  const categories = (ai?.categories?.length > 1 ? ai.categories : []).map((cat) => ({
+    title: cat.title,
+    share: `${Math.round((cat.count / inPatterns) * 100)}%`,
+    count: `${approx(cat.estimated)}${cat.count.toLocaleString('en-GB')}`,
+    previous: `${approx(cat.estimated && cat.previousCount)}${(cat.previousCount || 0).toLocaleString('en-GB')}`,
+    change: changeText(cat.count, cat.previousCount),
+    patterns: cat.members.filter((i) => groups[i]).slice(0, 6).map((i) => `${nameOf(groups[i], i)} (${groups[i].count})`).join(' · ') + (cat.members.length > 6 ? ` and ${cat.members.length - 6} more` : ''),
+  }));
+
   const breakdowns = (report.breakdowns || []).filter((b) => b.values.length).map((b) => ({
     label: b.label,
     estimated: b.estimated,
@@ -107,6 +118,7 @@ export function pdfContent({ report, groups = report?.groups || [], ai = null, g
     kpis,
     overview: ai?.overview || '',
     actions: ai?.actions || [],
+    categories,
     volume: { points: report.timeSeries || [], unit: (Date.parse(report.endDate) - Date.parse(report.startDate)) / 86400000 < 35 ? 'day' : 'week' },
     issues,
     moreIssues: Math.max(0, groups.length - PDF_ISSUES),

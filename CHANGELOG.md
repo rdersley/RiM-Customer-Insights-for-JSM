@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.0 (2026-10-09)
+
+- **AI categories:** "Summarise with AI" now also sorts the issues into a few broad categories (for example vPOS, payment devices, stock and products) with totals and change, and each category opens to its patterns. Switch between By category and All patterns. Categories are in the PDF and CSV, and the AI overview leads with them.
+
 ## 1.6.0 (2026-10-09)
 
 - **Create problem:** turn a recurring issue into a Jira problem (created as the agent), with the facts and optionally links to up to 20 example tickets. Uses the existing permission to create issues: no new scopes.

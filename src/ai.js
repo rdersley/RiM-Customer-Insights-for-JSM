@@ -46,6 +46,10 @@ export function aiInput(report) {
     } : null,
     // Chart buckets (days or weeks) that each pattern's trend follows.
     trendBuckets: (report.timeSeries || []).map((p) => p.date),
+    // Broad areas the patterns fall into (all patterns, not just those listed below).
+    categories: (Array.isArray(report.categories) ? report.categories : []).slice(0, 12).map((c) => ({
+      name: clip(c.title, 60), tickets: Number(c.count) || 0, previousPeriodTickets: Number(c.previousCount) || 0, patterns: Array.isArray(c.members) ? c.members.length : 0,
+    })),
     patterns: (report.groups || []).slice(0, MAX_PATTERNS).map((g, index) => ({
       index,
       ruleBasedName: clip(g.theme, 80),
@@ -97,6 +101,7 @@ breakdowns and each pattern's "where" show how tickets split across fields the a
 medianHoursToResolve and openShare show how long problems take to fix and how many are still open; point out issues that are clearly slower to resolve than the rest.
 Each pattern's trend gives tickets per trendBuckets entry; say whether a big issue is new, steady or fading when the trend shows it clearly.
 whenCreated and each pattern's busiestHours say when tickets are raised (in whenCreated.timeZone); mention it when a pattern clusters at particular times, such as the start of shifts.
+categories, when given, group every pattern into broad areas with totals; lead the overview with the biggest or fastest-growing areas, then the specific patterns behind them.
 dataQuality lists fields that are often empty or set to a placeholder; mention it in actions when the share is high (for example above 20%), as it limits what the breakdowns can show.
 Ticket totals are exact. When patternCountsAreEstimates is true, pattern counts are scaled up from a sample: describe them approximately ("around 250", "a handful", "several times more") and never quote small previous-period pattern counts as exact figures.
 Write in plain British English. Call report_insights once.`;
@@ -232,6 +237,70 @@ export async function suggestMerges(report, { chatFn = forgeChat, models = MODEL
     { role: 'user', content: `sameMeaning as JSON:\n${JSON.stringify(sameMeaning(report))}\n\nTicket groups as JSON:\n${JSON.stringify(input)}` },
   ], MERGE_TOOL);
   return { merges: parseMerges(raw, input.length), model };
+}
+
+// Step 2 of the AI summary: broad categories over the (merged) patterns, so a
+// long list of specific issues reads as a few areas with detail underneath.
+const CATEGORY_GROUPS = 80;
+export const MAX_CATEGORIES = 10;
+
+export function categoriseInput(report) {
+  return (report.groups || []).slice(0, CATEGORY_GROUPS).map((g, index) => ({
+    index,
+    name: clip(g.theme, 60),
+    tickets: Number(g.count) || 0,
+    examples: (g.tickets || []).slice(0, 2).map((t) => clip(t.summary, 100)),
+  }));
+}
+
+const CATEGORY_TOOL = {
+  type: 'function',
+  function: {
+    name: 'categorise_patterns',
+    description: 'Put every pattern into exactly one broad category and name each category.',
+    parameters: {
+      type: 'object',
+      required: ['categories'],
+      properties: {
+        categories: {
+          type: 'array',
+          description: `Between 2 and ${MAX_CATEGORIES} categories. Every input pattern index appears in exactly one category.`,
+          items: {
+            type: 'object',
+            required: ['title', 'members'],
+            properties: {
+              title: { type: 'string', description: 'Short name for the area, at most 4 words, e.g. "Payment devices" or "Accounts and access".' },
+              members: { type: 'array', items: { type: 'integer' }, description: 'Indexes of the patterns in this category.' },
+            },
+          },
+        },
+      },
+    },
+  },
+};
+
+const CATEGORY_SYSTEM = `You organise a service desk's recurring ticket patterns into a few broad categories for a customer account review.
+A category is an area a manager would report on: a device or system (for example the point-of-sale app, payment devices, printers), a process (stock and products, accounts and access, data sync) or a type of request.
+Each pattern stays as it is; you only choose its category. Group patterns that belong to the same area even when they are different problems, for example "app stuck", "app crash" and "app won't update" all belong under the app.
+Aim for 3 to 8 categories, sized so the biggest areas stand out. Use "Other" only for patterns that fit nowhere else, and keep it small.
+The same thing is often called different names (a brand name in one ticket, the generic name in another); sameMeaning lists words this site treats as the same.
+Name categories plainly, in words a customer would understand; no ticket codes or people's names.
+Put every index in exactly one category. Use only the data given. Call categorise_patterns once.`;
+
+export async function suggestCategories(report, { chatFn = forgeChat, models = MODELS } = {}) {
+  const input = categoriseInput(report);
+  if (input.length < 3) return { categories: [], model: null };
+  const { raw, model } = await callTool(chatFn, models, [
+    { role: 'system', content: CATEGORY_SYSTEM },
+    { role: 'user', content: `sameMeaning as JSON:
+${JSON.stringify(sameMeaning(report))}
+
+Patterns as JSON:
+${JSON.stringify(input)}` },
+  ], CATEGORY_TOOL);
+  // Same rules as merges: indexes in range and used once.
+  const categories = parseMerges({ issues: raw?.categories }, input.length).slice(0, MAX_CATEGORIES);
+  return { categories, model };
 }
 
 // ---- Live refresh: sort fresh patterns into the agent's approved issues -------
