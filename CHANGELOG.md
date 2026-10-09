@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.9.0 (2026-10-09)
+
+- **Live surge detection:** every 5 minutes, the latest tickets from watched organisations are grouped like a report. When enough tickets about the same issue arrive within the window (admin thresholds: tickets, minutes, times the normal rate for the last 7 days, and optionally a number of bases), agents see a **Live surges** alert at the top of the page. Off until a Jira admin turns it on in settings.
+- **Incident ticket for System Alert Manager (optional):** one "Possible incident" ticket per surge in the chosen project (SD, P2 by default, so "Send System Alert" is available), with the matching tickets linked and chosen fields (such as the client) copied from them. Later tickets on the same surge are linked with a comment instead of raising another ticket. The Organizations field is never copied, so customers don't see it.
+
 ## 1.8.0 (2026-10-09)
 
 - **Tickets per 100 crew:** a Jira admin uploads a customer's crew list in settings (Crew numbers). Only the number of crew per base is kept; the file is read in the browser, so names and contact details never leave the admin's computer. Reports then show tickets per 100 crew overall and for each base, ranked by rate and compared with the average, so a small base with lots of issues stands out next to STN or DUB. Small bases are marked, bases with tickets but no crew number are listed, and the table is in the PDF and CSV.
