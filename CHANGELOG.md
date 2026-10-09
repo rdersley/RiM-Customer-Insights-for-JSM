@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.0 (2026-10-09)
+
+- **Create problem:** turn a recurring issue into a Jira problem (created as the agent), with the facts and optionally links to up to 20 example tickets. Uses the existing permission to create issues: no new scopes.
+- **Portal: when requests arrive:** busiest hours, busiest day and a heatmap on portal reports, in the publishing agent's time zone. Reports published earlier show UTC until they're replaced.
+- **Portal: Download PDF:** customers can download their service report as a PDF, with the same layout as the agent page's Export PDF and only what the portal page shows.
+
 ## 1.5.0 (2026-10-07)
 
 - **Export PDF:** a printable report next to Export CSV, built in the browser: headline numbers, the AI summary and follow-ups (when generated), ticket activity, the top 25 recurring issues with where they happen, time to resolve and peak hours, example tickets for the top 10, breakdowns, when tickets arrive, and data quality. It uses the AI names when the AI summary has been run, and notes sampling and drill-down filters.

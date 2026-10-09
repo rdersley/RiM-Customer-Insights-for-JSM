@@ -116,6 +116,80 @@ export function pdfContent({ report, groups = report?.groups || [], ai = null, g
   };
 }
 
+/**
+ * A published portal report (a snapshot from publish.js, as portalView returns
+ * it) as PDF sections. Only what the customer already sees on the page:
+ * example requests are ones shared with their organisation.
+ */
+export function portalPdfContent(snapshot, { generatedAt = new Date() } = {}) {
+  if (!snapshot?.organization) throw new Error('There is no report to download.');
+  const { totals, period } = snapshot;
+  const n = (value) => (value || 0).toLocaleString('en-GB');
+  const notes = [];
+  if (snapshot.live) notes.push(`Numbers updated ${String(snapshot.refreshedAt).slice(0, 10)}; summary written ${String(snapshot.summaryWrittenAt).slice(0, 10)}.`);
+  if (snapshot.patterns.some((p) => p.estimated) || snapshot.breakdowns?.some((b) => b.estimated)) notes.push('Counts marked ~ are estimates.');
+
+  const kpis = [
+    { label: 'Requests', value: n(totals.current), hint: 'in this period' },
+    { label: 'Vs previous period', value: totals.changePercent === null ? 'New baseline' : `${signed(totals.changePercent)}%`, hint: `previous ${n(totals.previous)}` },
+    { label: 'Common issues', value: String(snapshot.patterns.length) },
+  ];
+  if (snapshot.resolution?.medianHours !== null && snapshot.resolution?.medianHours !== undefined) {
+    kpis.push({ label: 'Typical time to resolve', value: duration(snapshot.resolution.medianHours), hint: snapshot.resolution.openShare ? `${snapshot.resolution.openShare}% still open` : 'all resolved' });
+  }
+
+  const issues = snapshot.patterns.slice(0, PDF_ISSUES).map((p, index) => ({
+    name: p.title,
+    count: `${approx(p.estimated)}${n(p.count)}`,
+    previous: `${approx(p.estimated && p.previousCount)}${n(p.previousCount)}`,
+    change: changeText(p.count, p.previousCount),
+    trend: p.trend?.length ? trendWord(p.trend) : (!p.previousCount ? 'New' : ''),
+    where: '',
+    resolution: resolutionLine(p),
+    peak: peakText(p.hours || []),
+    combines: null,
+    summary: p.summary || '',
+    examples: index < PDF_DETAILS ? (p.examples || []).slice(0, PDF_EXAMPLES).map((e) => ({ key: e.key, summary: e.summary, status: e.status })) : [],
+  }));
+
+  const breakdowns = (snapshot.breakdowns || []).filter((b) => b.values.length).map((b) => ({
+    label: b.label,
+    estimated: b.estimated,
+    values: b.values.map((v) => ({ value: v.value, count: `${approx(b.estimated)}${n(v.count)}`, change: changeText(v.count, v.previousCount), resolution: resolutionLine(v) })),
+    withoutValue: '',
+  }));
+
+  let timeOfDay = null;
+  const grid = snapshot.timeOfDay?.grid;
+  if (grid && grid.some((row) => row.some(Boolean))) {
+    const days = grid.map((row) => row.reduce((a, c) => a + c, 0));
+    timeOfDay = { timeZone: snapshot.timeOfDay.timeZone, grid, busiestHours: peakText(hoursOf(grid)), busiestDay: DAYS[days.indexOf(Math.max(...days))], outOfHours: `${outOfHoursShare(grid)}%` };
+  }
+
+  return {
+    noun: 'Request',
+    title: snapshot.organization.name,
+    period: `Service report · ${period.from} to ${period.to}`,
+    generated: generatedAt.toISOString().slice(0, 16).replace('T', ' ') + ' UTC',
+    notes,
+    kpis,
+    overview: snapshot.overview || '',
+    actions: snapshot.actions || [],
+    volume: { points: snapshot.timeSeries || [], unit: (Date.parse(period.to) - Date.parse(period.from)) / 86400000 < 35 ? 'day' : 'week' },
+    issues,
+    moreIssues: Math.max(0, snapshot.patterns.length - PDF_ISSUES),
+    breakdowns,
+    timeOfDay,
+    dataQuality: [],
+  };
+}
+
+/** "service-report-acme-2026-09-01-2026-09-30.pdf" */
+export function portalPdfFileName(snapshot) {
+  const who = String(snapshot.organization?.name || 'report').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return `service-report-${who}-${snapshot.period.from}-${snapshot.period.to}.pdf`;
+}
+
 /** "customer-insights-acme-2026-09-01-2026-09-30.pdf" */
 export function pdfFileName(report) {
   const who = (report.organizations?.length > 1 ? `${report.organizations.length}-organisations` : report.organization || 'report')

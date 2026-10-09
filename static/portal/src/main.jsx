@@ -10,6 +10,7 @@ import { enableTheme } from '@retailinmotion/ui/theme';
 import { Button, Card, EmptyState, Kpi, Loading, Lozenge, Notice } from '@retailinmotion/ui/react';
 import { duration, sparkPath, trendWord } from '../../../src/trend.js';
 import { DAYS, hoursOf, peakWindow, windowText } from '../../../src/timeOfDay.js';
+import { version } from '../../../package.json';
 import './styles.css';
 
 enableTheme(view);
@@ -123,8 +124,20 @@ function Issue({ pattern }) {
   </li>;
 }
 
+async function downloadPdf(report) {
+  // Shares the agent page's PDF layout; jsPDF loads on first use.
+  const { exportPortalPdf } = await import('../../app/src/exportPdf.js');
+  await exportPortalPdf(report, { product: 'Customer Insights', version });
+}
+
 function Report({ report, onRefresh, refreshNote }) {
   const { totals } = report;
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfError, setPdfError] = useState('');
+  async function pdf() {
+    setPdfBusy(true); setPdfError('');
+    try { await downloadPdf(report); } catch (error) { setPdfError(error.message || 'The PDF could not be created.'); } finally { setPdfBusy(false); }
+  }
   const waitUntil = report.nextRefreshAt && report.nextRefreshAt > Date.now() ? report.nextRefreshAt : null;
   return <div className="nq-stack">
     <div className="nq-spread cp-title">
@@ -134,6 +147,7 @@ function Report({ report, onRefresh, refreshNote }) {
       </div>
       <div className="cp-updated">
         <span className="nq-muted">{report.live ? `Updated ${new Date(report.refreshedAt).toLocaleString()}` : `Published ${new Date(report.publishedAt).toLocaleDateString()}`}</span>
+        <Button small onClick={pdf} disabled={pdfBusy}>{pdfBusy ? 'Preparing…' : 'Download PDF'}</Button>
         {report.live && <Button small onClick={onRefresh} disabled={report.refreshing || Boolean(waitUntil)}
           title={waitUntil ? `Available again at ${time(waitUntil)}` : undefined}>
           {report.refreshing ? 'Updating…' : 'Refresh'}
@@ -141,6 +155,7 @@ function Report({ report, onRefresh, refreshNote }) {
       </div>
     </div>
     {refreshNote && <Notice>{refreshNote}</Notice>}
+    {pdfError && <Notice kind="error">{pdfError}</Notice>}
     {preparing(report) && <Notice>We’re preparing the detail for this report (trends and example requests). It usually takes a minute or two.</Notice>}
     <div className="nq-kpis">
       <Kpi icon="▤" label="Requests" value={totals.current.toLocaleString()} hint="in this period" />
