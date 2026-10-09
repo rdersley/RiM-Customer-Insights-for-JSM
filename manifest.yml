@@ -41,7 +41,7 @@ modules:
       interval: hour
     # Live surge detection (src/surgeJobs.js); does nothing until switched on.
     - key: surge-check
-      function: surge-check
+      function: surge-detector
       interval: fiveMinute
   consumer:
     - key: live-report-consumer
@@ -58,7 +58,7 @@ modules:
     - key: live-refresh
       handler: liveJobs.consumer
       timeoutSeconds: 900
-    - key: surge-check
+    - key: surge-detector
       handler: surgeJobs.scheduler
       timeoutSeconds: 120
   # Atlassian-hosted Claude for the opt-in AI summary (src/ai.js).
