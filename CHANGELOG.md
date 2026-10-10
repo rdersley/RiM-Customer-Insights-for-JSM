@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.11.0 (2026-10-10)
+
+- **Internal analysis:** a new Internal tab analyses your own projects instead of customer organisations: pick projects and, optionally, clients. The client is read from the client fields a Jira admin chooses in settings (for example SD Client in SD and Client elsewhere). Leave projects empty to follow a client across every project. Recurring issues, AI summary and categories, trends, time of day and full analysis all work the same. Internal reports break down by Project (several projects) and Client (several or no clients chosen), with drill-down.
+- **Where the effort goes:** recurring issues ranked by time logged on their tickets, or by tickets × typical time to resolve when little time is logged.
+- **Flow and workload** (Customers and Internal): tickets created against resolved over the period, backlog change, open tickets now and their age, and a forecast of tickets per week for the next 4 weeks from the last 12 (with a normal range), plus the busiest hours of the week ahead for staffing.
+
 ## 1.10.0 (2026-10-10)
 
 - **PDF logos:** a Jira admin uploads your logo and a logo per customer organisation in settings (PDF logos). PDFs show yours top left and the customer's top right, on the agent page and the portal's Download PDF. Images are shrunk in the browser before saving (PNG, JPEG or SVG in; at most 800 × 300 pixels kept).

@@ -2,14 +2,15 @@
 // live portal reports (read as the app, in a queued background job).
 import { asApp, asUser, route } from '@forge/api';
 import { buildReport, chartBuckets } from './analysis.js';
-import { dimensionsOf, jqlClause } from './settings.js';
+import { breakdownFieldIds, dimensionsOf, jqlClause } from './settings.js';
 import { validTimeZone } from './timeOfDay.js';
 
 export const DAY = 86400000;
 const PERIOD_SAMPLE = 900; // most tickets analysed per period (groupIssues' cap)
 const SAMPLE_SLICES = 9;
 const CONCURRENCY = 6;
-const FIELDS = ['summary', 'description', 'created', 'status', 'resolutiondate'];
+// timespent: logged work in seconds, for "where the effort goes".
+const FIELDS = ['summary', 'description', 'created', 'status', 'resolutiondate', 'timespent'];
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** 'user' (default) respects the signed-in user's permissions; 'app' is for background jobs. */
@@ -58,7 +59,7 @@ export async function countIssues(jql, mode) {
 
 /** A page of issues, each with `dims` for the admin-chosen breakdown fields. */
 export async function searchPage(jql, maxResults, nextPageToken, breakdowns = [], mode) {
-  const body = { jql: `${jql} ORDER BY created DESC`, maxResults, fields: [...FIELDS, ...breakdowns.map((b) => b.id)] };
+  const body = { jql: `${jql} ORDER BY created DESC`, maxResults, fields: [...FIELDS, ...breakdownFieldIds(breakdowns)] };
   if (nextPageToken) body.nextPageToken = nextPageToken;
   const result = await jiraPost(route`/rest/api/3/search/jql`, body, 'Ticket search', mode);
   const issues = (result.issues || []).map((issue) => ({ ...issue, dims: dimensionsOf(issue, breakdowns) }));
@@ -122,28 +123,63 @@ export function organisationsOf(payload) {
   return clean;
 }
 
-/** Validates an analysis request and builds its JQL. */
-export function parseQuery(payload, filter = null) {
+export const MAX_CLIENTS = 10;
+
+/** JQL for tickets whose client is one of `clients`, in any of the admin's client fields. */
+export function clientClause(clients, clientFields) {
+  const values = clients.map((c) => `"${escapeJql(c)}"`).join(', ');
+  const parts = clientFields
+    .map((f) => /^customfield_(\d+)$/.exec(f.id))
+    .filter(Boolean)
+    .map(([, n]) => `cf[${n}] in (${values})`);
+  if (!parts.length) throw new Error('Choose the client fields in Customer Insights settings (Internal analysis) first.');
+  return parts.length === 1 ? parts[0] : `(${parts.join(' OR ')})`;
+}
+
+/**
+ * Validates an analysis request and builds its JQL. A customer analysis is
+ * scoped by JSM organisations; an internal one (`scope: 'internal'`) by
+ * projects and/or clients, read from the admin's client fields (`clientFields`
+ * comes from settings, never from the page).
+ */
+export function parseQuery(payload, filter = null, { clientFields = [] } = {}) {
   const { startDate, endDate, projects = [] } = payload || {};
-  const organizations = organisationsOf(payload);
-  const organization = organizations[0];
-  if (!organization || !ISO_DATE.test(startDate || '') || !ISO_DATE.test(endDate || '')) {
-    throw new Error('Choose an organization and valid start and end dates.');
+  const internal = payload?.scope === 'internal';
+  const organizations = internal ? [] : organisationsOf(payload);
+  const requestedProjects = Array.isArray(projects) ? projects : [];
+  const cleanProjects = [...new Set(requestedProjects.map((key) => String(key).trim().toUpperCase()).filter((key) => /^[A-Z][A-Z0-9_]{0,49}$/.test(key)))];
+  const clients = internal ? [...new Set((Array.isArray(payload?.clients) ? payload.clients : []).map((c) => String(c ?? '').replace(/\s+/g, ' ').trim().slice(0, 120)).filter(Boolean))] : [];
+  if (clients.length > MAX_CLIENTS) throw new Error(`Choose up to ${MAX_CLIENTS} clients at a time.`);
+  if (internal ? !cleanProjects.length && !clients.length : !organizations[0]) {
+    throw new Error(internal ? 'Choose at least one project or client.' : 'Choose an organization and valid start and end dates.');
   }
-  const orgClause = organizations.length === 1
-    ? `organizations = "${escapeJql(organization.name)}"`
-    : `organizations in (${organizations.map((o) => `"${escapeJql(o.name)}"`).join(', ')})`;
+  if (!ISO_DATE.test(startDate || '') || !ISO_DATE.test(endDate || '')) throw new Error('Choose valid start and end dates.');
+  const label = internal
+    ? [cleanProjects.length ? cleanProjects.join(', ') : 'All projects', clients.join(', ')].filter(Boolean).join(' · ')
+    : organizations.map((o) => o.name).join(', ');
+  const organization = internal ? { name: label } : organizations[0];
   if (Number.isNaN(Date.parse(startDate)) || Number.isNaN(Date.parse(endDate))) throw new Error('Choose valid calendar dates.');
   if (startDate > endDate) throw new Error('Start date must be on or before end date.');
   const span = (Date.parse(endDate) - Date.parse(startDate)) / DAY;
   if (span > 365) throw new Error('Choose a period of 365 days or less for this first version.');
-  const requestedProjects = Array.isArray(projects) ? projects : [];
-  const cleanProjects = [...new Set(requestedProjects.map((key) => String(key).trim().toUpperCase()).filter((key) => /^[A-Z][A-Z0-9_]{0,49}$/.test(key)))];
   if (requestedProjects.length && !cleanProjects.length) throw new Error('Enter one or more valid Jira project keys, such as SD or HW.');
-  const projectClause = cleanProjects.length ? ` AND project in (${cleanProjects.map((key) => `'${key}'`).join(', ')})` : '';
+  const projectList = `project in (${cleanProjects.map((key) => `'${key}'`).join(', ')})`;
+  const projectClause = cleanProjects.length ? ` AND ${projectList}` : '';
   const filterClause = filter ? ` AND ${filter.clause}` : '';
   const fullSpan = Math.max(1, span + 1);
+  // Everything in scope, without dates (backlog and flow counts).
+  const internalScope = internal
+    ? [cleanProjects.length ? projectList : '', clients.length ? clientClause(clients, clientFields) : ''].filter(Boolean).join(' AND ')
+    : '';
+  const scopeJql = internal ? `${internalScope}${filterClause}` : null;
+  const orgClause = internal ? '' : organizations.length === 1
+    ? `organizations = "${escapeJql(organization.name)}"`
+    : `organizations in (${organizations.map((o) => `"${escapeJql(o.name)}"`).join(', ')})`;
   return {
+    internal,
+    label,
+    clients,
+    scopeJql: scopeJql ?? `${orgClause}${projectClause}${filterClause}`,
     organization,
     organizations,
     startDate,
@@ -154,7 +190,9 @@ export function parseQuery(payload, filter = null) {
     timeZone: validTimeZone(payload?.timeZone),
     previousStart: new Date(Date.parse(`${startDate}T00:00:00Z`) - fullSpan * DAY).toISOString().slice(0, 10),
     endExclusive: new Date(Date.parse(`${endDate}T00:00:00Z`) + DAY).toISOString().slice(0, 10),
-    between: (from, toExclusive) => `${orgClause} AND created >= "${from}" AND created < "${toExclusive}"${projectClause}${filterClause}`,
+    between: internal
+      ? (from, toExclusive) => `${internalScope} AND created >= "${from}" AND created < "${toExclusive}"${filterClause}`
+      : (from, toExclusive) => `${orgClause} AND created >= "${from}" AND created < "${toExclusive}"${projectClause}${filterClause}`,
   };
 }
 
@@ -212,8 +250,10 @@ export async function runAnalysis(query, { breakdowns = [], minPatternSize, plac
   console.log(`analysis (${mode}): ${currentTotal}+${previousTotal} tickets, ${issues.length} fetched in ${Date.now() - startedAt}ms`);
   return {
     ...report,
-    organization: query.organizations.map((o) => o.name).join(', '),
+    organization: query.label,
     organizations: query.organizations,
+    // Internal analyses: the projects and clients they cover.
+    scope: query.internal ? { kind: 'internal', projects: query.cleanProjects, clients: query.clients } : null,
     startDate, endDate, previousStart, endExclusive,
     projectCount: query.cleanProjects.length || null, totalFetched: issues.length, cutShort,
     breakdownFields: breakdowns.map(({ id, label, kind }) => ({ id, label, kind })),

@@ -1,7 +1,9 @@
 import ResolverModule from '@forge/resolver';
 import { asUser, route } from '@forge/api';
 import { textOf } from './analysis.js';
-import { filterFor, organisationsOf, parseQuery, pool, readJson, runAnalysis, searchPage } from './engine.js';
+import { countIssues, filterFor, organisationsOf, parseQuery, pool, readJson, runAnalysis, searchPage } from './engine.js';
+import { chartBuckets } from './analysis.js';
+import { AGE_BANDS, backlogAges, flowSummary, forecast, pastWeeks } from './flow.js';
 import { licenseAllows, UNLICENSED_MESSAGE } from './license.js';
 import { exportBackupPage, importBackupBatch } from './backup.js';
 import { suggestCategories, suggestMerges, summarise } from './ai.js';
@@ -11,7 +13,7 @@ import { MAX_ORG_LOGOS, sanitizeLogo } from './logos.js';
 import { headcountFor, orgsOf } from './headcount.js';
 import { isLive, liveConfigFrom } from './live.js';
 import { queueAlertCheck, queueRefresh } from './liveJobs.js';
-import { organisationBreakdown, sanitizeSettings, selectableFields } from './settings.js';
+import { internalBreakdowns, organisationBreakdown, sanitizeSettings, selectableFields } from './settings.js';
 import { problemFields, problemRequest, relatesLinkType } from './problem.js';
 
 // This package is "type": "module"; Forge's bundler then hands CommonJS packages
@@ -97,10 +99,12 @@ const DESCRIPTION_CHARS = 600;
 
 /**
  * The admin's breakdown fields, plus "Organisation" when an analysis covers
- * several organisations (limited to those selected).
+ * several organisations (limited to those selected), or Project and Client
+ * for an internal analysis.
  */
 async function breakdownsFor(payload) {
-  const { breakdowns } = await loadSettings();
+  const { breakdowns, clientFields } = await loadSettings();
+  if (payload?.scope === 'internal') return [...internalBreakdowns(payload, clientFields || []), ...breakdowns];
   const organisations = organisationsOf(payload);
   if (organisations.length < 2) return breakdowns;
   const response = await asUser().requestJira(route`/rest/api/3/field`, { headers: { Accept: 'application/json' } });
@@ -111,7 +115,7 @@ async function breakdownsFor(payload) {
 define('fetchTickets', async ({ payload, context }) => {
   if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
   const breakdowns = await breakdownsFor(payload);
-  const query = parseQuery(payload, filterFor(payload?.filter, breakdowns));
+  const query = parseQuery(payload, filterFor(payload?.filter, breakdowns), { clientFields: (await loadSettings()).clientFields || [] });
   const { from, toExclusive } = payload;
   if (!ISO_DATE.test(from || '') || !ISO_DATE.test(toExclusive || '') || from < query.previousStart || toExclusive > query.endExclusive || from >= toExclusive) {
     throw new Error('Invalid ticket range.');
@@ -131,6 +135,7 @@ define('fetchTickets', async ({ payload, context }) => {
           description: textOf(issue.fields?.description).join(' ').slice(0, DESCRIPTION_CHARS),
           created: issue.fields?.created,
           resolutiondate: issue.fields?.resolutiondate || null,
+          timespent: issue.fields?.timespent ?? null,
           status: { name: issue.fields?.status?.name || 'Unknown' },
         },
       });
@@ -143,11 +148,71 @@ define('fetchTickets', async ({ payload, context }) => {
 
 define('analyze', async ({ payload, context }) => {
   if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
-  const { minPatternSize, placeholders, synonyms } = await loadSettings();
+  const { minPatternSize, placeholders, synonyms, clientFields } = await loadSettings();
   const breakdowns = await breakdownsFor(payload);
-  const query = parseQuery(payload, filterFor(payload?.filter, breakdowns));
+  const query = parseQuery(payload, filterFor(payload?.filter, breakdowns), { clientFields: clientFields || [] });
   // Resolvers are killed at 25s; runAnalysis stops starting new fetches after the budget.
   return runAnalysis(query, { breakdowns, minPatternSize, placeholders, synonyms, mode: 'user', budgetMs: FETCH_BUDGET_MS });
+});
+
+// Flow and workload planning (src/flow.js), separate from analyze so it gets its
+// own time limit: created against resolved per chart bucket, the open backlog
+// by age, and 12 weeks of history for the forecast. Counts only.
+const FLOW_BUDGET_MS = 20000;
+define('analyzeFlow', async ({ payload, context }) => {
+  if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
+  const { clientFields } = await loadSettings();
+  const breakdowns = await breakdownsFor(payload);
+  const query = parseQuery(payload, filterFor(payload?.filter, breakdowns), { clientFields: clientFields || [] });
+  const deadline = Date.now() + FLOW_BUDGET_MS;
+  const count = (jql) => (Date.now() > deadline ? Promise.resolve(null) : countIssues(jql, 'user'));
+  const scope = query.scopeJql;
+  const buckets = chartBuckets(query.startDate, query.endDate);
+  const weeks = pastWeeks();
+  const [created, resolved, weekly, open, ...within] = await Promise.all([
+    pool(buckets.map((b) => () => count(query.between(b.from, b.toExclusive))), 6),
+    pool(buckets.map((b) => () => count(`${scope} AND resolved >= "${b.from}" AND resolved < "${b.toExclusive}"`)), 6),
+    pool(weeks.map((w) => () => count(`${scope} AND created >= "${w.from}" AND created < "${w.toExclusive}"`)), 6),
+    count(`${scope} AND statusCategory != Done`),
+    ...AGE_BANDS.map((days) => count(`${scope} AND statusCategory != Done AND created >= "-${days}d"`)),
+  ]);
+  const complete = ![...created, ...resolved, ...weekly, open, ...within].includes(null);
+  const nextMonday = new Date(Date.parse(`${weeks[weeks.length - 1].toExclusive}T00:00:00Z`) + 7 * 86400000).toISOString().slice(0, 10);
+  return {
+    complete,
+    flow: flowSummary(buckets.map((b, i) => ({ date: b.date, count: created[i] ?? 0 })), resolved.map((r) => r ?? 0)),
+    backlog: open === null ? null : { open, ages: backlogAges(open, within.map((w) => w ?? 0)) },
+    weekly: weeks.map((w, i) => ({ from: w.from, count: weekly[i] ?? 0 })),
+    // Forecast from the week after this one (this week is still under way).
+    forecast: complete ? forecast(weekly, undefined, nextMonday) : null,
+  };
+});
+
+// Internal analysis pickers: projects this user can see, and client values.
+define('getProjects', async ({ context }) => {
+  if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
+  const projects = [];
+  for (let start = 0; start < 500; start += 100) {
+    const page = await readJson(await asUser().requestJira(route`/rest/api/3/project/search?startAt=${start}&maxResults=100&orderBy=name`, { headers: { Accept: 'application/json' } }), 'Projects');
+    projects.push(...(page.values || []).map((p) => ({ key: String(p.key), name: String(p.name) })));
+    if (page.isLast || !page.values?.length) break;
+  }
+  return { projects, clientFields: ((await loadSettings()).clientFields || []).map((f) => ({ id: f.id, name: f.name })) };
+});
+
+// Values for the client picker, from Jira's JQL autocomplete for each client field.
+define('suggestClients', async ({ payload, context }) => {
+  if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
+  const text = String(payload?.text ?? '').slice(0, 60);
+  const { clientFields } = await loadSettings();
+  const lists = await pool((clientFields || []).map((f) => async () => {
+    const n = /^customfield_(\d+)$/.exec(f.id)?.[1];
+    if (!n) return [];
+    const response = await asUser().requestJira(route`/rest/api/3/jql/autocompletedata/suggestions?fieldName=${`cf[${n}]`}&fieldValue=${text}`, { headers: { Accept: 'application/json' } });
+    if (!response.ok) return [];
+    return ((await response.json()).results || []).map((r) => String(r.value ?? '').replace(/^"|"$/g, '')).filter(Boolean);
+  }), 3);
+  return [...new Set(lists.flat())].sort((a, b) => a.localeCompare(b)).slice(0, 30);
 });
 
 // Opt-in, separate from analyze so it gets its own time limit. The report comes
