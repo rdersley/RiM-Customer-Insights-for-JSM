@@ -34,7 +34,7 @@ export const DEFAULT_ALERTS = {
   issueTypeName: 'Task',
   issueTypeId: '',
 };
-export const DEFAULT_SETTINGS = { breakdowns: [], headcounts: [], portalEnabled: false, minPatternSize: MIN_PATTERN.default, placeholders: DEFAULT_PLACEHOLDERS, synonyms: DEFAULT_SYNONYMS, alerts: DEFAULT_ALERTS, surge: DEFAULT_SURGE };
+export const DEFAULT_SETTINGS = { breakdowns: [], clientFields: [], headcounts: [], portalEnabled: false, minPatternSize: MIN_PATTERN.default, placeholders: DEFAULT_PLACEHOLDERS, synonyms: DEFAULT_SYNONYMS, alerts: DEFAULT_ALERTS, surge: DEFAULT_SURGE };
 
 const whole = (value, { min, max, default: fallback }) => {
   const n = Number(value);
@@ -157,14 +157,17 @@ export function sanitizeSettings(input, selectable, organizations = []) {
     .map((b) => byId.get(String(b?.id)) && { ...byId.get(String(b.id)), label: clip(b.label, 40) || byId.get(String(b.id)).name, portal: b.portal === true })
     .filter((b) => b && !seen.has(b.id) && seen.add(b.id))
     .slice(0, MAX_BREAKDOWNS);
-  return { breakdowns, headcounts: sanitizeHeadcounts(input?.headcounts, organizations, breakdowns), portalEnabled: input?.portalEnabled === true, minPatternSize: patternMinimum(input?.minPatternSize), placeholders: placeholderList(input?.placeholders), synonyms: synonymList(input?.synonyms), alerts: sanitizeAlerts(input?.alerts, organizations), surge: sanitizeSurge(input?.surge, organizations, breakdowns, selectable) };
+  return { breakdowns, clientFields: clientFieldList(input?.clientFields, selectable), headcounts: sanitizeHeadcounts(input?.headcounts, organizations, breakdowns), portalEnabled: input?.portalEnabled === true, minPatternSize: patternMinimum(input?.minPatternSize), placeholders: placeholderList(input?.placeholders), synonyms: synonymList(input?.synonyms), alerts: sanitizeAlerts(input?.alerts, organizations), surge: sanitizeSurge(input?.surge, organizations, breakdowns, selectable) };
 }
 
 const quote = (v) => `"${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
-const SYSTEM_JQL = { components: 'component', priority: 'priority', issuetype: 'issuetype', resolution: 'resolution', labels: 'labels' };
+const SYSTEM_JQL = { components: 'component', priority: 'priority', issuetype: 'issuetype', resolution: 'resolution', labels: 'labels', project: 'project' };
+const cfOf = (id) => { const m = /^customfield_(\d+)$/.exec(String(id)); return m ? `cf[${m[1]}]` : null; };
 
 /** JQL for tickets with no value in breakdown field `b`, or null when it can't be searched. */
 export function jqlEmptyClause(b) {
+  // Client: read from several fields (SD Client in one project, Client in others).
+  if (b?.kind === 'client') { const parts = (b.fields || []).map((f) => cfOf(f.id)).filter(Boolean).map((cf) => `${cf} is EMPTY`); return parts.length ? parts.join(' AND ') : null; }
   const custom = /^customfield_(\d+)$/.exec(b?.id || '');
   const field = custom ? `cf[${custom[1]}]` : SYSTEM_JQL[b?.id];
   return field && !['requestType', 'organizations'].includes(b.kind) ? `${field} is EMPTY` : null;
@@ -179,6 +182,7 @@ export function jqlClause(b, value) {
   if (!b || value === undefined || value === null || value === '') return null;
   // JSM organisations are searched by name with the organizations clause.
   if (b.kind === 'organizations') return `organizations = ${quote(value)}`;
+  if (b.kind === 'client') { const parts = (b.fields || []).map((f) => cfOf(f.id)).filter(Boolean).map((cf) => `${cf} = ${quote(value)}`); return parts.length ? `(${parts.join(' OR ')})` : null; }
   const custom = /^customfield_(\d+)$/.exec(b.id);
   const field = custom ? `cf[${custom[1]}]` : SYSTEM_JQL[b.id];
   if (!field) return null;
@@ -195,12 +199,45 @@ export function jqlClause(b, value) {
 export function dimensionsOf(issue, breakdowns) {
   const dims = {};
   for (const b of breakdowns) {
-    const read = readValues(issue?.fields?.[b.id], b.kind);
+    // A client breakdown reads whichever of its fields the ticket has.
+    const read = b.kind === 'client'
+      ? (b.fields || []).flatMap((f) => readValues(issue?.fields?.[f.id], f.kind))
+      : readValues(issue?.fields?.[b.id], b.kind);
     // `only` keeps the values an analysis is about (the selected organisations).
     const values = b.only ? read.filter((v) => b.only.includes(v)) : read;
     if (values.length) dims[b.id] = [...new Set(values)];
   }
   return dims;
+}
+
+/** Jira fields a search must return for these breakdowns. */
+export const breakdownFieldIds = (breakdowns) => [...new Set(breakdowns.flatMap((b) => (b.kind === 'client' ? (b.fields || []).map((f) => f.id) : [b.id])))];
+
+export const MAX_CLIENT_FIELDS = 5;
+const CLIENT_KINDS = ['option', 'options', 'cascading', 'strings'];
+
+/** The admin's client fields (internal analysis), checked against the site's selectable fields. */
+export function clientFieldList(input, selectable = []) {
+  const byId = new Map(selectable.map((f) => [f.id, f]));
+  const seen = new Set();
+  return (Array.isArray(input) ? input : [])
+    .map((x) => byId.get(String(x?.id ?? x)))
+    .filter((f) => f && /^customfield_\d+$/.test(f.id) && CLIENT_KINDS.includes(f.kind) && !seen.has(f.id) && seen.add(f.id))
+    .slice(0, MAX_CLIENT_FIELDS)
+    .map((f) => ({ id: f.id, name: f.name, kind: f.kind }));
+}
+
+/**
+ * Breakdowns added to an internal analysis: by project when it covers several
+ * (or all), and by client (from any client field) unless it is one client.
+ */
+export function internalBreakdowns(payload, clientFields = []) {
+  const projects = Array.isArray(payload?.projects) ? payload.projects : [];
+  const clients = Array.isArray(payload?.clients) ? payload.clients : [];
+  const out = [];
+  if (projects.length !== 1) out.push({ id: 'project', label: 'Project', kind: 'named', portal: false });
+  if (clientFields.length && clients.length !== 1) out.push({ id: 'client', label: 'Client', kind: 'client', fields: clientFields, portal: false });
+  return out;
 }
 
 const ORG_FIELD = 'com.atlassian.servicedesk:sd-customer-organizations';

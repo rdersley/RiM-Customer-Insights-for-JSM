@@ -398,6 +398,8 @@ export function mergeGroups(groups, keyOf) {
     existing.keys = [...(existing.keys || []), ...(group.keys || [])];
     existing.resolvedHours = [...(existing.resolvedHours || []), ...(group.resolvedHours || [])];
     existing.openCount = (existing.openCount || 0) + (group.openCount || 0);
+    existing.loggedHours = Math.round(((existing.loggedHours || 0) + (group.loggedHours || 0)) * 10) / 10;
+    existing.loggedTickets = (existing.loggedTickets || 0) + (group.loggedTickets || 0);
     if (existing.buckets && group.buckets) existing.buckets = existing.buckets.map((n, i) => n + (group.buckets[i] || 0));
     if (existing.hours && group.hours) existing.hours = existing.hours.map((n, i) => n + (group.hours[i] || 0));
   }
@@ -554,6 +556,9 @@ export function buildDataQuality(breakdowns, current, currentScale, placeholders
 /** Most tickets per period grouped in one Forge call (the browser passes Infinity). */
 export const PERIOD_LIMIT = 900;
 
+const loggedSeconds = (issues) => issues.reduce((n, issue) => n + (Number(issue.fields?.timespent) > 0 ? Number(issue.fields.timespent) : 0), 0);
+const hoursRounded = (seconds) => Math.round((seconds / 3600) * 10) / 10;
+
 export function buildReport(issues, periodStart, periodEnd, totals = null, { limit = PERIOD_LIMIT, breakdowns = [], minPatternSize = 2, placeholders = [], synonyms = [], timeZone: zone = 'UTC' } = {}) {
   const timeZone = validTimeZone(zone);
   const minimum = Math.max(2, Number(minPatternSize) || 2);
@@ -597,6 +602,9 @@ export function buildReport(issues, periodStart, periodEnd, totals = null, { lim
         dimCounts: dimCountsOf(now.map((row) => row.issue)),
         buckets: bucketCounts(now.map((row) => row.issue), buckets),
         hours: hoursOf(gridOf(now.map((row) => row.issue), timeZone)),
+        // Logged work (Jira time tracking), scaled like the count.
+        loggedHours: hoursRounded(loggedSeconds(now.map((row) => row.issue)) * currentScale),
+        loggedTickets: now.filter((row) => Number(row.issue.fields.timespent) > 0).length,
       };
     })
     .sort((a, b) => b.count - a.count);
@@ -614,6 +622,12 @@ export function buildReport(issues, periodStart, periodEnd, totals = null, { lim
     // When tickets are created, in `timeZone`. Counts are of analysed tickets
     // (a sample for large organisations), so the page shows shares.
     timeOfDay: { timeZone, grid: gridOf(current, timeZone), analysed: current.length, estimated: currentScale > 1 },
+    // Logged work across the period, and the share of analysed tickets that have any.
+    effort: {
+      loggedHours: hoursRounded(loggedSeconds(current) * currentScale),
+      loggedShare: current.length ? Math.round((current.filter((issue) => Number(issue.fields.timespent) > 0).length / current.length) * 100) : 0,
+      estimated: currentScale > 1,
+    },
     breakdowns: buildBreakdowns(breakdowns, current, previous, currentScale, previousScale),
     dataQuality: buildDataQuality(breakdowns, current, currentScale, placeholders),
     placeholders,

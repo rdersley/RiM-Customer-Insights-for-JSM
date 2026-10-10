@@ -9,6 +9,7 @@ import { localIso, matchPreset, presetRange, PRESETS } from '../../../src/dates.
 import { analyseEveryTicket, Cancelled, FULL_LIMIT } from './fullAnalysis.js';
 import { exportPdf } from './exportPdf.js';
 import CrewRates from './CrewRates.jsx';
+import { EffortCard, FlowCard } from './WorkloadCards.jsx';
 import { crewRates } from '../../../src/headcount.js';
 import { applyMerges, categoriesOf, median, patternTrend, topShares } from '../../../src/analysis.js';
 import { jqlClause, jqlEmptyClause } from '../../../src/settings.js';
@@ -108,6 +109,17 @@ function App() {
   const [problemForm, setProblemForm] = useState(null);
   const [problems, setProblems] = useState({});
   const [creatingProblem, setCreatingProblem] = useState(false);
+  // Internal analysis: projects and/or clients instead of JSM organisations.
+  const [mode, setMode] = useState('customers');
+  const [projectList, setProjectList] = useState(null); // { projects, clientFields } once loaded
+  const [internalProjects, setInternalProjects] = useState([]);
+  const [clients, setClients] = useState([]);
+  const [clientText, setClientText] = useState('');
+  const [clientOptions, setClientOptions] = useState([]);
+  // Flow, backlog and forecast (analyzeFlow), loaded after each analysis.
+  const [flow, setFlow] = useState(null);
+  const [flowLoading, setFlowLoading] = useState(false);
+  const [flowError, setFlowError] = useState('');
 
   useEffect(() => {
     view.getContext().then((context) => setSiteUrl(String(context?.siteUrl || '').replace(/\/$/, ''))).catch(() => {});
@@ -145,7 +157,7 @@ function App() {
 
   function analyseAlert(alert) {
     if (!orgs.some((o) => o.id === alert.organization.id)) return;
-    setOrgIds([alert.organization.id]); setFrom(alert.window.from); setTo(alert.window.to); setProjectsText('');
+    setMode('customers'); setOrgIds([alert.organization.id]); setFrom(alert.window.from); setTo(alert.window.to); setProjectsText('');
     setPendingRun({ orgId: alert.organization.id, from: alert.window.from, to: alert.window.to });
   }
 
@@ -199,20 +211,45 @@ function App() {
   const labelEvery = Math.max(1, Math.ceil((report?.timeSeries?.length || 0) / 10));
   const totalChange = report?.changePercent === null ? 'New baseline' : `${signed(report?.changePercent)}%`;
 
+  const internal = mode === 'internal';
+  const canRun = internal ? internalProjects.length > 0 || clients.length > 0 : Boolean(selectedOrg);
+
   async function runAnalysis(event, nextFilter = null) {
     event?.preventDefault?.();
-    if (!selectedOrg) return;
+    if (!canRun) return;
     setFilter(nextFilter);
     cancelFull.current = true;
     setLoadingReport(true); setError(''); setReport(null); setAi(null); setAiError(''); setFullRun(null); setFullError('');
-    const query = { organization: selectedOrg, organizations: selectedOrgs, startDate: from, endDate: to, projects, timeZone: LOCAL_ZONE, ...(nextFilter && { filter: { id: nextFilter.id, value: nextFilter.value } }) };
+    setFlow(null); setFlowError('');
+    const shared = { startDate: from, endDate: to, timeZone: LOCAL_ZONE, ...(nextFilter && { filter: { id: nextFilter.id, value: nextFilter.value } }) };
+    const query = internal
+      ? { scope: 'internal', projects: internalProjects, clients, ...shared }
+      : { organization: selectedOrg, organizations: selectedOrgs, projects, ...shared };
     try {
       const result = await invoke('analyze', query);
       setReport(result);
       setLastQuery(query);
+      setFlowLoading(true);
+      invoke('analyzeFlow', query).then(setFlow).catch((e) => setFlowError(e.message || 'Flow counts failed.')).finally(() => setFlowLoading(false));
     } catch (e) { setError(e.message || 'Analysis failed. Check your Jira access and filters.'); }
     finally { setLoadingReport(false); }
   }
+
+  // Internal mode: load the project list once, and suggest client values as the user types.
+  useEffect(() => {
+    if (!internal || projectList) return;
+    invoke('getProjects').then(setProjectList).catch((e) => setError(e.message || 'Projects could not be loaded.'));
+  }, [internal]);
+  useEffect(() => {
+    if (!internal || !projectList?.clientFields?.length) return undefined;
+    const timer = setTimeout(() => { invoke('suggestClients', { text: clientText }).then((list) => setClientOptions(list || [])).catch(() => {}); }, 300);
+    return () => clearTimeout(timer);
+  }, [internal, clientText, projectList]);
+  const addClient = (value) => {
+    const v = String(value || '').trim();
+    if (v && !clients.includes(v) && clients.length < 10) setClients((list) => [...list, v]);
+    setClientText('');
+  };
 
   async function runFull() {
     cancelFull.current = false;
@@ -576,7 +613,40 @@ function App() {
     </Card>}
 
     {licensed && <Card>
-      <form className="nq-filters ci-filters" onSubmit={runAnalysis}>
+      <div className="ci-mode"><Tabs items={[{ id: 'customers', label: 'Customers' }, { id: 'internal', label: 'Internal' }]} active={mode} onChange={setMode} /></div>
+      {internal ? <form className="nq-filters ci-filters" onSubmit={runAnalysis}>
+        <Field label={`Projects (${internalProjects.length})`} htmlFor="ci-int-projects">
+          <select id="ci-int-projects" className="nq-select" value="" disabled={!projectList}
+            onChange={(e) => { const key = e.target.value; if (key) setInternalProjects((list) => (list.includes(key) ? list : [...list, key])); }}>
+            <option value="">{projectList ? 'Add a project…' : 'Loading projects…'}</option>
+            {(projectList?.projects || []).filter((p) => !internalProjects.includes(p.key)).map((p) => <option key={p.key} value={p.key}>{p.name} ({p.key})</option>)}
+          </select>
+        </Field>
+        <Field label={`Clients (optional, ${clients.length})`} htmlFor="ci-int-client"
+          help={projectList && !projectList.clientFields?.length ? 'A Jira admin chooses the client fields in Customer Insights settings.' : undefined}>
+          <div className="ci-picker">
+            <input id="ci-int-client" className="nq-input" list="ci-int-client-options" value={clientText} placeholder="Type a client" disabled={!projectList?.clientFields?.length}
+              onChange={(e) => { const v = e.target.value; if (clientOptions.includes(v)) addClient(v); else setClientText(v); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addClient(clientText); } }} />
+            <datalist id="ci-int-client-options">{clientOptions.filter((c) => !clients.includes(c)).map((c) => <option key={c} value={c} />)}</datalist>
+          </div>
+        </Field>
+        <Field label="Period" htmlFor="ci-int-period">
+          <select id="ci-int-period" className="nq-select" value={preset} onChange={(e) => choosePreset(e.target.value)}>
+            {PRESETS.map(({ key, label }) => <option key={key} value={key}>{label}</option>)}
+            <option value="custom" disabled={preset !== 'custom'}>Custom dates</option>
+          </select>
+        </Field>
+        <Field label="From" htmlFor="ci-int-from">
+          <input id="ci-int-from" className="nq-input" type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} />
+        </Field>
+        <Field label="To" htmlFor="ci-int-to">
+          <input id="ci-int-to" className="nq-input" type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} />
+        </Field>
+        <Button appearance="primary" type="submit" disabled={!canRun || loadingReport}>
+          {loadingReport ? 'Analysing…' : 'Run analysis'}
+        </Button>
+      </form> : <form className="nq-filters ci-filters" onSubmit={runAnalysis}>
         <Field label="Customer organisation" htmlFor="ci-org">
           <select id="ci-org" className="nq-select" value={orgIds[0] || ''} onChange={(e) => setOrgIds((ids) => [e.target.value, ...ids.slice(1).filter((id) => id !== e.target.value)])} disabled={loadingOrgs || !orgs.length}>
             {loadingOrgs && <option>Loading organisations…</option>}
@@ -609,19 +679,31 @@ function App() {
         <Button appearance="primary" type="submit" disabled={!selectedOrg || loadingOrgs || loadingReport}>
           {loadingReport ? 'Analysing…' : 'Run analysis'}
         </Button>
-      </form>
-      {selectedOrgs.length > 1 && <div className="ci-chips" aria-label="Selected organisations">
+      </form>}
+      {internal && (internalProjects.length > 0 || clients.length > 0) && <div className="ci-chips" aria-label="Selected projects and clients">
+        {internalProjects.map((key) => <span className="ci-chip" key={key}>
+          {projectList?.projects?.find((p) => p.key === key)?.name || key}
+          <button type="button" aria-label={`Remove ${key}`} onClick={() => setInternalProjects((list) => list.filter((k) => k !== key))}>×</button>
+        </span>)}
+        {clients.map((c) => <span className="ci-chip" key={c}>
+          Client: {c}
+          <button type="button" aria-label={`Remove ${c}`} onClick={() => setClients((list) => list.filter((x) => x !== c))}>×</button>
+        </span>)}
+      </div>}
+      {!internal && selectedOrgs.length > 1 && <div className="ci-chips" aria-label="Selected organisations">
         {selectedOrgs.map((org) => <span className="ci-chip" key={org.id}>
           {org.name}
           <button type="button" aria-label={`Remove ${org.name}`} onClick={() => setOrgIds((ids) => ids.filter((id) => id !== org.id))}>×</button>
         </span>)}
         <Button small appearance="subtle" onClick={() => setOrgIds((ids) => ids.slice(0, 1))}>Clear extra</Button>
       </div>}
-      <p className="nq-muted">
+      {internal ? <p className="nq-muted">
+        Analyses tickets in these projects, and only for these clients when you add any (read from {projectList?.clientFields?.map((x) => x.name).join(' or ') || 'the client fields'}). Leave projects empty to follow a client across every project. Results follow your Jira permissions.
+      </p> : <p className="nq-muted">
         {selectedOrgs.length > 1
           ? 'Analyses tickets shared with any of these organisations together, with a breakdown by organisation. Portal reports need a single organisation.'
           : 'Uses tickets shared with this organisation.'} Results follow your Jira permissions.
-      </p>
+      </p>}
     </Card>}
 
     {error && <Notice kind="error" title="We couldn’t complete that request.">{error}</Notice>}
@@ -699,6 +781,8 @@ function App() {
             : <EmptyState compact title="No repeated patterns found in these tickets yet." />}
         </Card>
       </div>
+
+      <FlowCard flow={flow} loading={flowLoading} error={flowError} timeOfDay={report.timeOfDay} />
 
       {report.breakdowns?.length > 0
         ? <div className="nq-grid ci-breakdowns">{report.breakdowns.map((b) => {
@@ -826,6 +910,8 @@ function App() {
             : <div className="ci-patterns">{groups.map(renderPattern)}</div>
           : <EmptyState compact title="No repeated issue patterns detected">There are no groups of similar tickets with more than one request in this period.</EmptyState>}
       </Card>
+
+      <EffortCard report={report} groups={groups} nameOf={patternName} />
 
       {!reportOrgId && report.organizations?.length > 1 && <p className="nq-muted">Portal reports are published for one organisation at a time. Choose a single organisation to prepare one.</p>}
 

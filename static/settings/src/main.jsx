@@ -8,7 +8,7 @@ import '@retailinmotion/ui/css';
 import { enableTheme } from '@retailinmotion/ui/theme';
 import { ActionBar, AppHeader, Button, Card, Field, Footer, Loading, Notice } from '@retailinmotion/ui/react';
 import { version } from '../../../package.json';
-import { ALERT_LIMITS, DEFAULT_ALERTS, DEFAULT_PLACEHOLDERS, DEFAULT_SYNONYMS, MAX_BREAKDOWNS, MAX_PLACEHOLDERS, MAX_WATCHED, MIN_PATTERN, SYNONYM_LIMITS } from '../../../src/settings.js';
+import { MAX_CLIENT_FIELDS, ALERT_LIMITS, DEFAULT_ALERTS, DEFAULT_PLACEHOLDERS, DEFAULT_SYNONYMS, MAX_BREAKDOWNS, MAX_PLACEHOLDERS, MAX_WATCHED, MIN_PATTERN, SYNONYM_LIMITS } from '../../../src/settings.js';
 import BackupRestore from './BackupRestore.jsx';
 import CrewNumbers from './CrewNumbers.jsx';
 import SurgeSettings from './SurgeSettings.jsx';
@@ -102,6 +102,21 @@ function App() {
           </div>}
           <p className="nq-muted">Only fields that hold choices can be used: select lists, checkboxes, radio buttons, cascading selects, labels, components, priority and request type.</p>
         </div>
+      </Card>
+
+      <Card title="Internal analysis" description="The Internal tab analyses your own projects instead of customer organisations. Choose the fields that hold the client, so an analysis can be narrowed to a client and broken down by client. Different projects can use different fields (for example SD Client in SD and Client elsewhere).">
+        <Field label={`Client fields (up to ${MAX_CLIENT_FIELDS})`} htmlFor="cs-client-fields"
+          help="Select lists, checkboxes, cascading selects and labels can be used. A ticket's client is read from whichever of these it has.">
+          <div className="cs-orgs" id="cs-client-fields">{state.fields.filter((f) => /^customfield_/.test(f.id) && ['option', 'options', 'cascading', 'strings'].includes(f.kind)).map((f) => {
+            const chosen = (draft.clientFields || []).map((x) => x.id ?? x);
+            const on = chosen.includes(f.id);
+            return <label className="cs-check" key={f.id}>
+              <input type="checkbox" className="nq-check" checked={on} disabled={!on && chosen.length >= MAX_CLIENT_FIELDS}
+                onChange={(e) => { setSaved(false); setDraft((d) => ({ ...d, clientFields: e.target.checked ? [...chosen, f.id] : chosen.filter((id) => id !== f.id) })); }} />
+              <span>{f.name}</span>
+            </label>;
+          })}</div>
+        </Field>
       </Card>
 
       <CrewNumbers headcounts={draft.headcounts || []} organizations={state.organizations || []} breakdowns={state.settings.breakdowns} portalEnabled={draft.portalEnabled === true}
