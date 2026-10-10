@@ -128,7 +128,8 @@ function Issue({ pattern }) {
 async function downloadPdf(report) {
   // Shares the agent page's PDF layout; jsPDF loads on first use.
   const { exportPortalPdf } = await import('../../app/src/exportPdf.js');
-  await exportPortalPdf(report, { product: 'Customer Insights', version });
+  const logos = await invoke('reportLogos', { orgId: report.organization.id }).catch(() => null);
+  await exportPortalPdf(report, { product: 'Customer Insights', version, logos });
 }
 
 function Report({ report, onRefresh, refreshNote }) {

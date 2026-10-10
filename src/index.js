@@ -6,7 +6,9 @@ import { licenseAllows, UNLICENSED_MESSAGE } from './license.js';
 import { exportBackupPage, importBackupBatch } from './backup.js';
 import { suggestCategories, suggestMerges, summarise } from './ai.js';
 import { snapshotFrom } from './publish.js';
-import { deleteLive, deleteReport, listAlerts, loadAlert, loadLiveConfig, loadLiveState, loadReport, loadSettings, saveAlert, saveLiveConfig, saveReport, saveSettings } from './storage.js';
+import { deleteLive, deleteReport, listAlerts, listOrgLogos, loadAlert, loadLiveConfig, loadLiveState, loadLogo, loadReport, loadSettings, saveAlert, saveLiveConfig, saveLogo, saveReport, saveSettings } from './storage.js';
+import { MAX_ORG_LOGOS, sanitizeLogo } from './logos.js';
+import { headcountFor, orgsOf } from './headcount.js';
 import { isLive, liveConfigFrom } from './live.js';
 import { queueAlertCheck, queueRefresh } from './liveJobs.js';
 import { organisationBreakdown, sanitizeSettings, selectableFields } from './settings.js';
@@ -192,13 +194,27 @@ async function visibleOrganisation(orgId) {
   return { id: String(data.id), name: data.name };
 }
 
-// Crew numbers for one organisation (settings → Crew numbers), so the page can
-// show tickets per 100 crew. Only for organisations this agent can see.
+// Crew numbers for an analysis (settings → Crew numbers), so the page can show
+// tickets per 100 crew: the crew list covering every analysed organisation,
+// or null. `covered` lists those of them that are in some crew list, so the
+// page can say what to analyse instead. Only organisations this agent can see.
 define('getHeadcount', async ({ payload, context }) => {
   if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
-  const organization = await visibleOrganisation(payload?.orgId);
+  const requested = (Array.isArray(payload?.orgIds) ? payload.orgIds : [payload?.orgId]).map(String).slice(0, 10);
+  const ids = (await pool(requested.map((id) => () => visibleOrganisation(id)), 4)).map((o) => o.id);
   const { headcounts } = await loadSettings();
-  return (headcounts || []).find((h) => h.organization.id === organization.id) || null;
+  const covered = ids.filter((id) => (headcounts || []).some((h) => orgsOf(h).some((o) => String(o.id) === id)));
+  return { headcount: headcountFor(headcounts, ids), covered };
+});
+
+// PDF logos: the company's, and the organisation's when the report covers one
+// this agent can see.
+define('getPdfLogos', async ({ payload, context }) => {
+  if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
+  const company = await loadLogo('company');
+  if (!payload?.orgId) return { company, customer: null };
+  const organization = await visibleOrganisation(payload.orgId);
+  return { company, customer: await loadLogo(organization.id) };
 });
 
 // Portal publishing follows each site's admin setting. (Not a Forge variable:
@@ -354,8 +370,33 @@ define('saveSettings', async ({ payload, context }) => {
   if (settings.surge.enabled && settings.surge.createIssue) settings.surge.issueTypeId = await alertIssueType(settings.surge);
   await saveSettings(settings);
   const { alerts } = settings;
-  console.log(`saveSettings: ${settings.breakdowns.length} breakdowns, portal ${settings.portalEnabled ? 'on' : 'off'}, alerts ${alerts.enabled ? `on (${alerts.organizations.length} orgs, tickets ${alerts.createIssue ? alerts.projectKey : 'off'})` : 'off'}`);
+  console.log(`saveSettings: ${settings.breakdowns.length} breakdowns, ${settings.headcounts.length} crew lists, surge ${settings.surge.enabled ? `on (${settings.surge.organizations.length} orgs, tickets ${settings.surge.createIssue ? settings.surge.projectKey : 'off'})` : 'off'}, portal ${settings.portalEnabled ? 'on' : 'off'}, alerts ${alerts.enabled ? `on (${alerts.organizations.length} orgs, tickets ${alerts.createIssue ? alerts.projectKey : 'off'})` : 'off'}`);
   return settings;
+});
+
+// ---- PDF logos (settings page): Jira admins only -------------------------------
+
+define('getLogos', async ({ context }) => {
+  if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
+  if (!(await isJiraAdmin())) throw new Error('Only Jira admins can change logos.');
+  const [company, orgs] = await Promise.all([loadLogo('company'), listOrgLogos()]);
+  return { company, orgs };
+});
+
+// payload: { target: 'company' | orgId, logo } — a null logo removes it.
+define('saveLogo', async ({ payload, context }) => {
+  if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
+  if (!(await isJiraAdmin())) throw new Error('Only Jira admins can change logos.');
+  const target = payload?.target === 'company' ? 'company' : String(payload?.target ?? '');
+  const logo = payload?.logo ? sanitizeLogo(payload.logo) : null;
+  if (payload?.logo && !logo) throw new Error('That image couldn’t be used. Use a PNG or JPEG under about 150 KB.');
+  if (target !== 'company') {
+    if (!(await listOrganizations()).some((o) => o.id === target)) throw new Error('That organisation wasn’t found.');
+    if (logo && !(await loadLogo(target)) && Object.keys(await listOrgLogos()).length >= MAX_ORG_LOGOS) throw new Error(`Up to ${MAX_ORG_LOGOS} organisation logos.`);
+  }
+  await saveLogo(target, logo);
+  console.log(`saveLogo: ${target === 'company' ? 'company' : 'organisation'} ${logo ? `saved (${logo.dataUrl.length} chars)` : 'removed'}`);
+  return { target, logo };
 });
 
 // ---- Backup & restore (settings page): Jira admins only ---------------------

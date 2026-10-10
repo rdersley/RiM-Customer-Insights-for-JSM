@@ -7,7 +7,7 @@ import { licenseAllows } from './license.js';
 import { portalView } from './publish.js';
 import { isLive, nextCustomerRefresh } from './live.js';
 import { queueRefresh } from './liveJobs.js';
-import { loadLiveConfig, loadLiveState, loadReport, loadSettings, updateLiveState } from './storage.js';
+import { loadLiveConfig, loadLiveState, loadLogo, loadReport, loadSettings, updateLiveState } from './storage.js';
 
 const ResolverClass = Resolver.default ?? Resolver;
 const resolver = new ResolverClass();
@@ -65,6 +65,16 @@ resolver.define('refreshMyReport', async ({ payload, context }) => {
   await updateLiveState(orgId, { requestedAt: new Date().toISOString() });
   await queueRefresh(orgId, 'customer');
   return { queued: true };
+});
+
+// Logos for the report PDF: the company's and the viewer's organisation's.
+resolver.define('reportLogos', async ({ payload, context }) => {
+  if (!(await available(context))) throw new Error('Service reports aren’t available.');
+  const accountId = viewer(context);
+  const orgId = String(payload?.orgId ?? '');
+  if (!accountId || !(await organisationsOf(accountId)).includes(orgId)) throw new Error('This report isn’t available to you.');
+  const [company, customer] = await Promise.all([loadLogo('company'), loadLogo(orgId)]);
+  return { company, customer };
 });
 
 export const handler = resolver.getDefinitions();

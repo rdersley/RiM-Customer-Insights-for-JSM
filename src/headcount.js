@@ -90,17 +90,35 @@ export function crewFromFile(text, { today = new Date().toISOString().slice(0, 1
   return { values, total: values.reduce((n, v) => n + v.count, 0), people, skipped };
 }
 
+export const MAX_HEADCOUNT_ORGS = 10; // organisations sharing one crew list
+
+/** A crew list's organisations; lists saved before 1.10 had one `organization`. */
+export const orgsOf = (h) => (Array.isArray(h?.organizations) ? h.organizations : h?.organization ? [h.organization] : []);
+
+/**
+ * The crew list for an analysis of `orgIds`: one that covers every one of
+ * them (for example Ryanair Crew, Hardware and Head Office sharing one list).
+ */
+export function headcountFor(headcounts, orgIds) {
+  const ids = (orgIds || []).map(String);
+  if (!ids.length) return null;
+  return (headcounts || []).find((h) => ids.every((id) => orgsOf(h).some((o) => String(o.id) === id))) || null;
+}
+
 /** Validates the admin's crew numbers against organisations and breakdown fields they can use. */
 export function sanitizeHeadcounts(input, organizations = [], breakdowns = []) {
   const orgs = new Map(organizations.map((o) => [String(o.id), o]));
   const fields = new Set(breakdowns.map((b) => b.id));
-  const seen = new Set();
+  const seen = new Set(); // an organisation belongs to one crew list
   return (Array.isArray(input) ? input : [])
     .map((h) => {
-      const org = orgs.get(String(h?.organization?.id));
-      if (!org || !ORG_ID.test(String(org.id)) || seen.has(String(org.id))) return null;
       if (!fields.has(String(h?.fieldId))) return null;
-      seen.add(String(org.id));
+      const covered = orgsOf(h)
+        .map((o) => orgs.get(String(o?.id)))
+        .filter((org) => org && ORG_ID.test(String(org.id)) && !seen.has(String(org.id)) && seen.add(String(org.id)))
+        .slice(0, MAX_HEADCOUNT_ORGS)
+        .map((org) => ({ id: String(org.id), name: String(org.name) }));
+      if (!covered.length) return null;
       const values = new Map();
       for (const v of (Array.isArray(h?.values) ? h.values : [])) {
         const value = clip(v?.value, 80);
@@ -110,7 +128,7 @@ export function sanitizeHeadcounts(input, organizations = [], breakdowns = []) {
       const list = [...values.values()].sort((a, b) => b.count - a.count).slice(0, MAX_HEADCOUNT_VALUES);
       if (!list.length) return null;
       return {
-        organization: { id: String(org.id), name: String(org.name) },
+        organizations: covered,
         fieldId: String(h.fieldId),
         values: list,
         updatedAt: ISO_TIME.test(String(h?.updatedAt)) ? String(h.updatedAt) : new Date().toISOString(),

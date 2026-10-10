@@ -12,6 +12,7 @@ import { ALERT_LIMITS, DEFAULT_ALERTS, DEFAULT_PLACEHOLDERS, DEFAULT_SYNONYMS, M
 import BackupRestore from './BackupRestore.jsx';
 import CrewNumbers from './CrewNumbers.jsx';
 import SurgeSettings from './SurgeSettings.jsx';
+import PdfLogos from './PdfLogos.jsx';
 import './styles.css';
 
 enableTheme(view);
@@ -207,6 +208,8 @@ function App() {
         <Button appearance="subtle" disabled={!dirty || saving} onClick={() => { setDraft(state.settings); setSaved(false); }}>Discard</Button>
         <Button appearance="primary" disabled={!dirty || saving} onClick={save}>Save</Button>
       </ActionBar>
+
+      <PdfLogos invoke={invoke} organizations={state.organizations || []} />
 
       <BackupRestore invoke={invoke} app="Customer Insights" filePrefix="retailinmotion-customer-insights" />
     </>}

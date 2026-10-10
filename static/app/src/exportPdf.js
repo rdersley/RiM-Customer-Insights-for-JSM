@@ -2,6 +2,7 @@
 // like the CSV. Content and wording come from src/pdfReport.js. jsPDF is
 // loaded on first use so the page itself stays small.
 import { pdfContent, pdfFileName, pdfSafe, portalPdfContent, portalPdfFileName } from '../../../src/pdfReport.js';
+import { logoFormat, logoSize } from '../../../src/logos.js';
 
 // A fixed light palette: the PDF is printed and shared, so it doesn't follow
 // the agent's screen theme. Colours match the UI kit's light tokens.
@@ -23,7 +24,7 @@ const lineHeight = (size) => size * 0.3528 * 1.35;
 const changeColour = (text) => (text.startsWith('+') || text === 'New' ? MORE : text.startsWith('-') ? FEWER : MUTED);
 
 /** The PDF document for a report. `JsPdf` is jsPDF's constructor (tests pass it directly). */
-export function buildPdf(JsPdf, c, { product = 'Customer Insights', version = '' } = {}) {
+export function buildPdf(JsPdf, c, { product = 'Customer Insights', version = '', logos = null } = {}) {
   // "Tickets" for agents; the portal says "Requests".
   const noun = c.noun || 'Ticket';
   const nouns = `${noun}s`;
@@ -59,6 +60,19 @@ export function buildPdf(JsPdf, c, { product = 'Customer Insights', version = ''
     doc.setDrawColor(...BRAND); doc.setLineWidth(0.6); doc.line(M, y, M + 18, y);
     y += 4;
   }
+
+  // ---- Logos: the company's top left, the customer's top right ------------------
+  const LOGO_H = 14;
+  let logoRow = 0;
+  for (const [logo, right] of [[logos?.company, false], [logos?.customer, true]]) {
+    if (!logo?.dataUrl) continue;
+    try {
+      const { width, height } = logoSize(logo, LOGO_H, CW / 2 - 6);
+      doc.addImage(logo.dataUrl, logoFormat(logo), right ? W - M - width : M, y, width, height);
+      logoRow = Math.max(logoRow, height);
+    } catch { /* an unreadable image is left out rather than failing the PDF */ }
+  }
+  if (logoRow) y += logoRow + 6;
 
   // ---- Title -----------------------------------------------------------------
   font(9, 'bold', BRAND);
@@ -317,13 +331,13 @@ export function buildPdf(JsPdf, c, { product = 'Customer Insights', version = ''
 }
 
 /** Builds and downloads the PDF. Arguments are as for pdfContent, plus product and version. */
-export async function exportPdf({ product, version, ...args }) {
-  await download(pdfContent(args), pdfFileName(args.report), { product, version });
+export async function exportPdf({ product, version, logos, ...args }) {
+  await download(pdfContent(args), pdfFileName(args.report), { product, version, logos });
 }
 
 /** The customer portal's "Download PDF": the published report as customers see it. */
-export async function exportPortalPdf(snapshot, { product, version } = {}) {
-  await download(portalPdfContent(snapshot), portalPdfFileName(snapshot), { product, version });
+export async function exportPortalPdf(snapshot, { product, version, logos } = {}) {
+  await download(portalPdfContent(snapshot), portalPdfFileName(snapshot), { product, version, logos });
 }
 
 async function download(content, fileName, options) {

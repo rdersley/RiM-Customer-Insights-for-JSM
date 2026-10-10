@@ -11,7 +11,7 @@ import { readJson, runAnalysis, parseQuery } from './engine.js';
 import { assignToApproved } from './ai.js';
 import { assignByWords, isDue, liveCounts, livePeriod, refreshedSnapshotInput } from './live.js';
 import { snapshotFrom } from './publish.js';
-import { crewRates } from './headcount.js';
+import { crewRates, headcountFor } from './headcount.js';
 import * as storage from './storage.js';
 import { checkOrganisation, isCheckDue } from './alerts.js';
 
@@ -81,7 +81,8 @@ export async function refreshLiveReport(orgId) {
     const linkTo = await portalLinker();
     for (const pattern of counts.patterns) for (const example of pattern.examples || []) example.url = linkTo(example.key);
     // Tickets per 100 crew only when an admin ticked "Show on portal" for this organisation.
-    const headcount = (headcounts || []).find((h) => h.organization.id === String(orgId) && h.portal);
+    const shared = headcountFor(headcounts, [orgId]);
+    const headcount = shared?.portal ? shared : null;
     const crew = headcount ? crewRates(report, headcount) : null;
     const snapshot = snapshotFrom(refreshedSnapshotInput(config, report, counts, new Date(), { breakdowns, crewRates: crew }), { detailed: true });
     // Don't overwrite if the agent removed or replaced the live report meanwhile.
