@@ -2,6 +2,7 @@
 // so modules that import this file still load in tests.
 import { reportKey } from './publish.js';
 import { DEFAULT_SETTINGS } from './settings.js';
+import { logoKey } from './logos.js';
 
 const kvs = async () => (await import('@forge/kvs')).kvs;
 
@@ -91,6 +92,31 @@ export async function saveAlert(alert) {
 export async function updateAlert(id, change) {
   const alert = await loadAlert(id);
   if (alert) await saveAlert({ ...alert, ...change });
+}
+
+// PDF logos (src/logos.js): 'company', or an organisation id.
+export async function loadLogo(target) {
+  return (await (await kvs()).get(logoKey(target))) || null;
+}
+
+export async function saveLogo(target, logo) {
+  if (logo) await (await kvs()).set(logoKey(target), logo);
+  else await (await kvs()).delete(logoKey(target));
+}
+
+/** Every organisation logo: { orgId: logo }. */
+export async function listOrgLogos() {
+  const { kvs: store, WhereConditions } = await import('@forge/kvs');
+  const logos = {};
+  let cursor;
+  do {
+    let query = store.query().where('key', WhereConditions.beginsWith('logo:org:')).limit(20);
+    if (cursor) query = query.cursor(cursor);
+    const page = await query.getMany();
+    for (const { key, value } of page.results) logos[key.slice('logo:org:'.length)] = value;
+    cursor = page.nextCursor;
+  } while (cursor);
+  return logos;
 }
 
 // Live surge detection (src/surge.js): open surges per organisation.

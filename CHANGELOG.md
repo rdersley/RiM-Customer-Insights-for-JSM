@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.10.0 (2026-10-10)
+
+- **PDF logos:** a Jira admin uploads your logo and a logo per customer organisation in settings (PDF logos). PDFs show yours top left and the customer's top right, on the agent page and the portal's Download PDF. Images are shrunk in the browser before saving (PNG, JPEG or SVG in; at most 800 × 300 pixels kept).
+- **Crew lists for several organisations:** one crew list can now cover several organisations (for example Ryanair Crew, Hardware, Bond and Head Office). Reports for any of them, on their own or together, show tickets per 100 crew. Lists saved earlier carry over. When some analysed organisations aren't in the list, the report says which.
+- The settings log now records how many crew lists and whether surge detection is on.
+
 ## 1.9.0 (2026-10-09)
 
 - **Live surge detection:** every 5 minutes, the latest tickets from watched organisations are grouped like a report. When enough tickets about the same issue arrive within the window (admin thresholds: tickets, minutes, times the normal rate for the last 7 days, and optionally a number of bases), agents see a **Live surges** alert at the top of the page. Off until a Jira admin turns it on in settings.

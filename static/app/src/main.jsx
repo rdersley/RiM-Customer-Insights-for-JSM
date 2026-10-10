@@ -240,14 +240,20 @@ function App() {
     invoke('getPublication', { orgId: reportOrgId }).then(setPublication).catch((e) => setPublishError(e.message || 'Could not check the portal report.'));
   }, [report?.organization, report?.startDate, report?.endDate, reportOrgId]);
 
-  // Crew numbers for this organisation (settings → Crew numbers), for tickets per 100 crew.
-  const [headcount, setHeadcount] = useState(null);
+  // Crew numbers (settings → Crew numbers) for tickets per 100 crew: the crew
+  // list that covers every analysed organisation. `covered` says which of them
+  // are in a crew list when none covers them all.
+  const analysedOrgIds = (lastQuery?.organizations?.length ? lastQuery.organizations : [lastQuery?.organization]).filter(Boolean).map((o) => String(o.id));
+  const [crewLookup, setCrewLookup] = useState({ headcount: null, covered: [] });
   useEffect(() => {
-    setHeadcount(null);
-    if (!reportOrgId) return;
-    invoke('getHeadcount', { orgId: reportOrgId }).then(setHeadcount).catch(() => {});
-  }, [reportOrgId]);
+    setCrewLookup({ headcount: null, covered: [] });
+    if (!report || !analysedOrgIds.length) return;
+    invoke('getHeadcount', { orgIds: analysedOrgIds }).then((r) => setCrewLookup({ headcount: r?.headcount || null, covered: r?.covered || [] })).catch(() => {});
+  }, [report?.organization, analysedOrgIds.join(',')]);
+  const headcount = crewLookup.headcount;
   const crew = report && headcount ? crewRates(report, headcount) : null;
+  const orgName = (id) => lastQuery?.organizations?.find((o) => String(o.id) === id)?.name || lastQuery?.organization?.name;
+  const crewNotCovered = !headcount && crewLookup.covered.length ? analysedOrgIds.filter((id) => !crewLookup.covered.includes(id)).map(orgName) : [];
 
   function prepareDraft() {
     setPublishError('');
@@ -392,7 +398,9 @@ function App() {
     if (!report) return;
     setPdfBusy(true);
     try {
-      await exportPdf({ report, groups, ai, filter: report.filter, crew, product: PRODUCT, version });
+      // Logos are optional: a failed lookup still gives a PDF.
+      const logos = await invoke('getPdfLogos', { orgId: reportOrgId || null }).catch(() => null);
+      await exportPdf({ report, groups, ai, filter: report.filter, crew, logos, product: PRODUCT, version });
     } catch (e) {
       setError(`The PDF couldn’t be created: ${e.message || 'unknown error'}`);
     } finally { setPdfBusy(false); }
@@ -718,6 +726,7 @@ function App() {
         })}</div>
         : <p className="nq-muted">Tip: a Jira admin can add breakdowns by base, device type or any other field in <strong>Jira settings → Apps → Customer Insights</strong>.</p>}
 
+      {!crew && crewNotCovered.length > 0 && <p className="nq-muted">Tickets per 100 crew isn’t shown: {crewNotCovered.join(', ')} {crewNotCovered.length === 1 ? 'isn’t' : 'aren’t'} in the same crew list as the other organisations. Add {crewNotCovered.length === 1 ? 'it' : 'them'} in Customer Insights settings → Crew numbers, or leave {crewNotCovered.length === 1 ? 'it' : 'them'} out of the analysis.</p>}
       {crew && <CrewRates rates={crew} approx={crew.estimated ? '≈' : ''} onDrill={(() => {
         const field = report.breakdownFields?.find((f) => f.id === headcount.fieldId);
         return field && !filter && canDrill(field, 'x') ? (value) => drill(field, value) : null;

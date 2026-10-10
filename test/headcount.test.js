@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { crewFromFile, crewRates, csvRows, sanitizeHeadcounts } from '../src/headcount.js';
+import { crewFromFile, crewRates, csvRows, headcountFor, sanitizeHeadcounts } from '../src/headcount.js';
 import { sanitizeSettings } from '../src/settings.js';
 import { snapshotFrom } from '../src/publish.js';
 import { crewSection } from '../src/pdfReport.js';
@@ -30,7 +30,7 @@ test('a short "base, number" list works too, with or without a header', () => {
   assert.deepEqual(csvRows('a,"b ""c"", d"\n'), [['a', 'b "c", d']]);
 });
 
-const orgs = [{ id: '188', name: 'Ryanair Crew' }, { id: '7', name: 'Other' }];
+const orgs = [{ id: '188', name: 'Ryanair Crew' }, { id: '7', name: 'Other' }, { id: '189', name: 'Ryanair Hardware' }, { id: '190', name: 'Ryanair Head Office' }];
 const fields = [{ id: 'customfield_1', name: 'Base or Location', kind: 'option' }];
 
 test('crew numbers are validated against organisations and breakdown fields', () => {
@@ -40,10 +40,28 @@ test('crew numbers are validated against organisations and breakdown fields', ()
     { organization: { id: '999' }, fieldId: 'customfield_1', values: [{ value: 'DUB', count: 1 }] },
     { organization: { id: '7' }, fieldId: 'customfield_9', values: [{ value: 'DUB', count: 1 }] },
   ], orgs, [{ id: 'customfield_1' }]);
-  assert.deepEqual(clean, [{ organization: { id: '188', name: 'Ryanair Crew' }, fieldId: 'customfield_1', values: [{ value: 'STN', count: 10 }], updatedAt: '2026-10-09T10:00:00.000Z', source: 'crew.csv', portal: true }]);
+  // Lists saved before 1.10 had one `organization`; they become `organizations`.
+  assert.deepEqual(clean, [{ organizations: [{ id: '188', name: 'Ryanair Crew' }], fieldId: 'customfield_1', values: [{ value: 'STN', count: 10 }], updatedAt: '2026-10-09T10:00:00.000Z', source: 'crew.csv', portal: true }]);
   const settings = sanitizeSettings({ breakdowns: [{ id: 'customfield_1', label: 'Base' }], headcounts: clean }, fields, orgs);
   assert.equal(settings.headcounts.length, 1);
   assert.deepEqual(sanitizeSettings({ headcounts: clean }, fields, orgs).headcounts, []);
+});
+
+test('one crew list can cover several organisations; each organisation is in one list only', () => {
+  const values = [{ value: 'STN', count: 10 }];
+  const clean = sanitizeHeadcounts([
+    { organizations: [{ id: '188' }, { id: '189' }, { id: '999' }, { id: '189' }], fieldId: 'customfield_1', values },
+    { organizations: [{ id: '189' }, { id: '190' }], fieldId: 'customfield_1', values },
+    { organizations: [{ id: '188' }], fieldId: 'customfield_1', values },
+  ], orgs, [{ id: 'customfield_1' }]);
+  assert.deepEqual(clean.map((h) => h.organizations.map((o) => o.id)), [['188', '189'], ['190']]);
+  // An analysis gets a crew list only when one list covers every organisation in it.
+  assert.equal(headcountFor(clean, ['188']), clean[0]);
+  assert.equal(headcountFor(clean, ['189', '188']), clean[0]);
+  assert.equal(headcountFor(clean, ['188', '190']), null);
+  assert.equal(headcountFor(clean, []), null);
+  // Older stored data still matches before it is next saved.
+  assert.equal(headcountFor([{ organization: { id: '188' }, values }], ['188']).values, values);
 });
 
 const headcount = { organization: { id: '188', name: 'Ryanair Crew' }, fieldId: 'customfield_1', updatedAt: '2026-10-09T10:00:00.000Z',
