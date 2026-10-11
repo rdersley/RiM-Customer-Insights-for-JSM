@@ -178,3 +178,10 @@
 .ci-mode { margin-bottom: var(--nq-space-150); }
 .ci-picker { display: flex; gap: var(--nq-space-075, 6px); }
 .ci-picker .nq-input { flex: 1; }
+
+/* Knowledge gaps */
+.ci-gaps { list-style: none; margin: 0; padding: 0; }
+.ci-gaps li { display: flex; justify-content: space-between; gap: var(--nq-space-150); align-items: center; padding: var(--nq-space-075, 6px) 0; border-bottom: 1px solid var(--nq-border); }
+.ci-gaps li:last-child { border-bottom: 0; }
+.ci-gaps__name { color: var(--nq-text); min-width: 0; }
+.ci-gaps__articles { text-align: right; }

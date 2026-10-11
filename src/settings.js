@@ -4,6 +4,7 @@
 
 import { sanitizeHeadcounts } from './headcount.js';
 import { DEFAULT_SURGE, sanitizeSurge } from './surge.js';
+import { slaFieldList } from './sla.js';
 
 export const MAX_BREAKDOWNS = 5;
 // Fewest tickets (in the analysed sample) for a group to count as a pattern.
@@ -44,7 +45,7 @@ export const DEFAULT_ALERTS = {
   issueTypeName: 'Task',
   issueTypeId: '',
 };
-export const DEFAULT_SETTINGS = { breakdowns: [], internalBreakdowns: [], internalPatterns: { minPatternSize: MIN_PATTERN.default, synonyms: DEFAULT_INTERNAL_SYNONYMS, placeholders: DEFAULT_PLACEHOLDERS }, clientFields: [], headcounts: [], portalEnabled: false, minPatternSize: MIN_PATTERN.default, placeholders: DEFAULT_PLACEHOLDERS, synonyms: DEFAULT_SYNONYMS, alerts: DEFAULT_ALERTS, surge: DEFAULT_SURGE };
+export const DEFAULT_SETTINGS = { breakdowns: [], internalBreakdowns: [], slaFields: [], internalPatterns: { minPatternSize: MIN_PATTERN.default, synonyms: DEFAULT_INTERNAL_SYNONYMS, placeholders: DEFAULT_PLACEHOLDERS }, clientFields: [], headcounts: [], portalEnabled: false, minPatternSize: MIN_PATTERN.default, placeholders: DEFAULT_PLACEHOLDERS, synonyms: DEFAULT_SYNONYMS, alerts: DEFAULT_ALERTS, surge: DEFAULT_SURGE };
 
 const whole = (value, { min, max, default: fallback }) => {
   const n = Number(value);
@@ -174,7 +175,7 @@ function breakdownList(input, byId, { portal = true } = {}) {
     .slice(0, MAX_BREAKDOWNS);
 }
 
-export function sanitizeSettings(input, selectable, organizations = []) {
+export function sanitizeSettings(input, selectable, organizations = [], { slaChoices = [] } = {}) {
   const byId = new Map(selectable.map((f) => [f.id, f]));
   const breakdowns = breakdownList(input?.breakdowns, byId);
   // Internal reports have their own breakdown fields (never on the portal).
@@ -186,7 +187,7 @@ export function sanitizeSettings(input, selectable, organizations = []) {
     synonyms: synonymList(ip.synonyms, DEFAULT_INTERNAL_SYNONYMS),
     placeholders: placeholderList(ip.placeholders),
   };
-  return { breakdowns, internalBreakdowns, internalPatterns, clientFields: clientFieldList(input?.clientFields, selectable), headcounts: sanitizeHeadcounts(input?.headcounts, organizations, breakdowns), portalEnabled: input?.portalEnabled === true, minPatternSize: patternMinimum(input?.minPatternSize), placeholders: placeholderList(input?.placeholders), synonyms: synonymList(input?.synonyms), alerts: sanitizeAlerts(input?.alerts, organizations), surge: sanitizeSurge(input?.surge, organizations, breakdowns, selectable) };
+  return { breakdowns, internalBreakdowns, internalPatterns, slaFields: slaFieldList(input?.slaFields, slaChoices), clientFields: clientFieldList(input?.clientFields, selectable), headcounts: sanitizeHeadcounts(input?.headcounts, organizations, breakdowns), portalEnabled: input?.portalEnabled === true, minPatternSize: patternMinimum(input?.minPatternSize), placeholders: placeholderList(input?.placeholders), synonyms: synonymList(input?.synonyms), alerts: sanitizeAlerts(input?.alerts, organizations), surge: sanitizeSurge(input?.surge, organizations, breakdowns, selectable) };
 }
 
 const quote = (v) => `"${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;

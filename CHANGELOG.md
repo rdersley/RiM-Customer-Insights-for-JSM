@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.14.0 (2026-10-11)
+
+- **SLAs:** choose the service project SLA fields that matter in settings (Internal → SLAs; for example Time to resolution, Time to first response). Reports on both tabs show the share met and breached in the period, the recurring issues that breach most, and the breakdown values (such as teams) with the highest breach rate. Works with full analysis too.
+- **Knowledge gaps:** a "Check knowledge base" button on reports searches the knowledge base for each of the top 15 recurring issues and flags the ones with no matching article, with links to any matches. Searches run as the agent, so they only find articles the agent can see.
+
 ## 1.13.0 (2026-10-11)
 
 - **Internal pattern settings:** the Internal tab of settings has its own minimum tickets per pattern, words that mean the same and placeholder values, used by internal reports (and their AI merge and full analysis). Internal word lists start with IT defaults: laptop/notebook/pc, login/sign in, password, MFA/2FA/authenticator, VPN/remote access, access/permissions. Customer settings are unchanged.

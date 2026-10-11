@@ -1,4 +1,5 @@
 import { gridOf, hoursOf, validTimeZone } from './timeOfDay.js';
+import { addTallies, slaSummary, slaTally } from './sla.js';
 
 const STOP = new Set(`about above after again against all also am an and any are as at be because been before being below between both but by can could did do does doing down during each few for from further had has have having he her here hers herself him himself his how i if in into is it its itself just me more most my myself no nor not of off on once only or other our ours ourselves out over own same she should so some such than that the their theirs them themselves then there these they this those through to too under until up very was we were what when where which while who whom why with would you your yours a au aux avec ces dans de des du elle en est et eux il je la le les leur lui ma mais mes moi mon ne nos notre nous on ou par pas pour qu que quel quelle quels qui sa sans se ses son sur ta te tes toi ton tu un une vos votre vous c est d l j n s m`.split(/\s+/));
 
@@ -349,7 +350,7 @@ const BREAKDOWN_VALUES = 10;
 // Every value's counts, for rates against crew numbers (headcount.js).
 const BREAKDOWN_ALL = 300;
 
-function buildBreakdowns(breakdowns, current, previous, currentScale, previousScale) {
+function buildBreakdowns(breakdowns, current, previous, currentScale, previousScale, slaFields = []) {
   const now = dimCountsOf(current);
   const before = dimCountsOf(previous);
   return breakdowns.map(({ id, label }) => {
@@ -360,7 +361,7 @@ function buildBreakdowns(breakdowns, current, previous, currentScale, previousSc
         const count = Math.round((cur[value] || 0) * currentScale);
         const previousCount = Math.round((prev[value] || 0) * previousScale);
         const withValue = current.filter((issue) => issue.dims?.[id]?.includes(value));
-        return { value, count, previousCount, change: count - previousCount, ...resolutionOf(withValue) };
+        return { value, count, previousCount, change: count - previousCount, ...resolutionOf(withValue), ...(slaFields.length ? { sla: slaTally(withValue, slaFields) } : {}) };
       })
       .filter((v) => v.count > 0)
       .sort((a, b) => b.count - a.count)
@@ -400,6 +401,7 @@ export function mergeGroups(groups, keyOf) {
     existing.openCount = (existing.openCount || 0) + (group.openCount || 0);
     existing.loggedHours = Math.round(((existing.loggedHours || 0) + (group.loggedHours || 0)) * 10) / 10;
     existing.loggedTickets = (existing.loggedTickets || 0) + (group.loggedTickets || 0);
+    if (existing.sla || group.sla) existing.sla = addTallies(existing.sla, group.sla);
     if (existing.buckets && group.buckets) existing.buckets = existing.buckets.map((n, i) => n + (group.buckets[i] || 0));
     if (existing.hours && group.hours) existing.hours = existing.hours.map((n, i) => n + (group.hours[i] || 0));
   }
@@ -559,7 +561,7 @@ export const PERIOD_LIMIT = 900;
 const loggedSeconds = (issues) => issues.reduce((n, issue) => n + (Number(issue.fields?.timespent) > 0 ? Number(issue.fields.timespent) : 0), 0);
 const hoursRounded = (seconds) => Math.round((seconds / 3600) * 10) / 10;
 
-export function buildReport(issues, periodStart, periodEnd, totals = null, { limit = PERIOD_LIMIT, breakdowns = [], minPatternSize = 2, placeholders = [], synonyms = [], timeZone: zone = 'UTC' } = {}) {
+export function buildReport(issues, periodStart, periodEnd, totals = null, { limit = PERIOD_LIMIT, breakdowns = [], minPatternSize = 2, placeholders = [], synonyms = [], timeZone: zone = 'UTC', slaFields = [] } = {}) {
   const timeZone = validTimeZone(zone);
   const minimum = Math.max(2, Number(minPatternSize) || 2);
   const from = Date.parse(periodStart);
@@ -605,6 +607,8 @@ export function buildReport(issues, periodStart, periodEnd, totals = null, { lim
         // Logged work (Jira time tracking), scaled like the count.
         loggedHours: hoursRounded(loggedSeconds(now.map((row) => row.issue)) * currentScale),
         loggedTickets: now.filter((row) => Number(row.issue.fields.timespent) > 0).length,
+        // SLA met/breached among the analysed tickets (rates, not scaled).
+        ...(slaFields.length ? { sla: slaTally(now.map((row) => row.issue), slaFields) } : {}),
       };
     })
     .sort((a, b) => b.count - a.count);
@@ -628,7 +632,10 @@ export function buildReport(issues, periodStart, periodEnd, totals = null, { lim
       loggedShare: current.length ? Math.round((current.filter((issue) => Number(issue.fields.timespent) > 0).length / current.length) * 100) : 0,
       estimated: currentScale > 1,
     },
-    breakdowns: buildBreakdowns(breakdowns, current, previous, currentScale, previousScale),
+    breakdowns: buildBreakdowns(breakdowns, current, previous, currentScale, previousScale, slaFields),
+    // The admin's SLA fields and how the period did against each.
+    slaFields,
+    sla: slaSummary(current, slaFields, currentScale),
     dataQuality: buildDataQuality(breakdowns, current, currentScale, placeholders),
     placeholders,
     // Same-meaning words used for grouping, so "Analyse every ticket" and the AI use them too.
