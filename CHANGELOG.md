@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.13.0 (2026-10-11)
+
+- **Internal pattern settings:** the Internal tab of settings has its own minimum tickets per pattern, words that mean the same and placeholder values, used by internal reports (and their AI merge and full analysis). Internal word lists start with IT defaults: laptop/notebook/pc, login/sign in, password, MFA/2FA/authenticator, VPN/remote access, access/permissions. Customer settings are unchanged.
+- The General tab is now Backup.
+
 ## 1.12.0 (2026-10-11)
 
 - **Settings in tabs:** Customers (breakdown fields, crew numbers, spike alerts, surge detection, portal, PDF logos), Internal (client fields and breakdown fields) and General (patterns, data quality, backup & restore).

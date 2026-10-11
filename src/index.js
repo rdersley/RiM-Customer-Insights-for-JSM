@@ -13,7 +13,7 @@ import { MAX_ORG_LOGOS, sanitizeLogo } from './logos.js';
 import { headcountFor, orgsOf } from './headcount.js';
 import { isLive, liveConfigFrom } from './live.js';
 import { queueAlertCheck, queueRefresh } from './liveJobs.js';
-import { autoInternalBreakdowns, organisationBreakdown, sanitizeSettings, selectableFields } from './settings.js';
+import { autoInternalBreakdowns, organisationBreakdown, patternSettingsFor, sanitizeSettings, selectableFields } from './settings.js';
 import { problemFields, problemRequest, relatesLinkType } from './problem.js';
 
 // This package is "type": "module"; Forge's bundler then hands CommonJS packages
@@ -148,7 +148,9 @@ define('fetchTickets', async ({ payload, context }) => {
 
 define('analyze', async ({ payload, context }) => {
   if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
-  const { minPatternSize, placeholders, synonyms, clientFields } = await loadSettings();
+  const settings = await loadSettings();
+  const { clientFields } = settings;
+  const { minPatternSize, placeholders, synonyms } = patternSettingsFor(settings, payload?.scope === 'internal');
   const breakdowns = await breakdownsFor(payload);
   const query = parseQuery(payload, filterFor(payload?.filter, breakdowns), { clientFields: clientFields || [] });
   // Resolvers are killed at 25s; runAnalysis stops starting new fetches after the budget.

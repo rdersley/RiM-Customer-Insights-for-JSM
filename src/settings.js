@@ -20,6 +20,16 @@ export const DEFAULT_SYNONYMS = [
   ['login', 'log in', 'logon', 'log on', 'sign in', 'signin'],
 ];
 export const SYNONYM_LIMITS = { groups: 40, words: 20, length: 40 };
+// Internal reports (the Internal tab) group IT and support tickets, so their
+// same-meaning words differ from the customer defaults.
+export const DEFAULT_INTERNAL_SYNONYMS = [
+  ['laptop', 'notebook', 'pc', 'computer', 'desktop'],
+  ['login', 'log in', 'logon', 'log on', 'sign in', 'signin'],
+  ['password', 'pwd', 'passcode'],
+  ['mfa', '2fa', 'two factor', 'authenticator', 'multi factor'],
+  ['vpn', 'remote access'],
+  ['access', 'permission', 'permissions'],
+];
 // Spike alerts (src/alerts.js). Off until an admin turns them on; creating a
 // Jira ticket per alert is a separate switch.
 export const MAX_WATCHED = 25;
@@ -34,7 +44,7 @@ export const DEFAULT_ALERTS = {
   issueTypeName: 'Task',
   issueTypeId: '',
 };
-export const DEFAULT_SETTINGS = { breakdowns: [], internalBreakdowns: [], clientFields: [], headcounts: [], portalEnabled: false, minPatternSize: MIN_PATTERN.default, placeholders: DEFAULT_PLACEHOLDERS, synonyms: DEFAULT_SYNONYMS, alerts: DEFAULT_ALERTS, surge: DEFAULT_SURGE };
+export const DEFAULT_SETTINGS = { breakdowns: [], internalBreakdowns: [], internalPatterns: { minPatternSize: MIN_PATTERN.default, synonyms: DEFAULT_INTERNAL_SYNONYMS, placeholders: DEFAULT_PLACEHOLDERS }, clientFields: [], headcounts: [], portalEnabled: false, minPatternSize: MIN_PATTERN.default, placeholders: DEFAULT_PLACEHOLDERS, synonyms: DEFAULT_SYNONYMS, alerts: DEFAULT_ALERTS, surge: DEFAULT_SURGE };
 
 const whole = (value, { min, max, default: fallback }) => {
   const n = Number(value);
@@ -68,8 +78,8 @@ export function sanitizeAlerts(input, organizations = []) {
 }
 
 /** Placeholder values from a list or comma/new-line separated text; trimmed, unique, bounded. */
-export function placeholderList(input) {
-  if (input === undefined || input === null) return DEFAULT_PLACEHOLDERS;
+export function placeholderList(input, fallback = DEFAULT_PLACEHOLDERS) {
+  if (input === undefined || input === null) return fallback;
   const items = Array.isArray(input) ? input : String(input).split(/[,\n]/);
   const seen = new Set();
   return items
@@ -83,8 +93,8 @@ export function placeholderList(input) {
  * bluepad, pin pad" (or just commas). Lists need two or more words; a word
  * already in an earlier list is skipped so each word means one thing.
  */
-export function synonymList(input) {
-  if (input === undefined || input === null) return DEFAULT_SYNONYMS;
+export function synonymList(input, fallback = DEFAULT_SYNONYMS) {
+  if (input === undefined || input === null) return fallback;
   const lines = Array.isArray(input) ? input : String(input).split('\n');
   const used = new Set();
   const out = [];
@@ -97,6 +107,12 @@ export function synonymList(input) {
     if (out.length >= SYNONYM_LIMITS.groups) break;
   }
   return out;
+}
+
+/** The pattern settings for an analysis: the internal ones for the Internal tab. */
+export function patternSettingsFor(settings, internal) {
+  const source = internal ? { ...DEFAULT_SETTINGS.internalPatterns, ...settings?.internalPatterns } : settings || {};
+  return { minPatternSize: source.minPatternSize, synonyms: source.synonyms, placeholders: source.placeholders };
 }
 
 /** A pattern minimum within range; anything else falls back to the default. */
@@ -163,7 +179,14 @@ export function sanitizeSettings(input, selectable, organizations = []) {
   const breakdowns = breakdownList(input?.breakdowns, byId);
   // Internal reports have their own breakdown fields (never on the portal).
   const internalBreakdowns = breakdownList(input?.internalBreakdowns, byId, { portal: false });
-  return { breakdowns, internalBreakdowns, clientFields: clientFieldList(input?.clientFields, selectable), headcounts: sanitizeHeadcounts(input?.headcounts, organizations, breakdowns), portalEnabled: input?.portalEnabled === true, minPatternSize: patternMinimum(input?.minPatternSize), placeholders: placeholderList(input?.placeholders), synonyms: synonymList(input?.synonyms), alerts: sanitizeAlerts(input?.alerts, organizations), surge: sanitizeSurge(input?.surge, organizations, breakdowns, selectable) };
+  // Internal reports have their own pattern and data quality settings.
+  const ip = input?.internalPatterns || {};
+  const internalPatterns = {
+    minPatternSize: patternMinimum(ip.minPatternSize),
+    synonyms: synonymList(ip.synonyms, DEFAULT_INTERNAL_SYNONYMS),
+    placeholders: placeholderList(ip.placeholders),
+  };
+  return { breakdowns, internalBreakdowns, internalPatterns, clientFields: clientFieldList(input?.clientFields, selectable), headcounts: sanitizeHeadcounts(input?.headcounts, organizations, breakdowns), portalEnabled: input?.portalEnabled === true, minPatternSize: patternMinimum(input?.minPatternSize), placeholders: placeholderList(input?.placeholders), synonyms: synonymList(input?.synonyms), alerts: sanitizeAlerts(input?.alerts, organizations), surge: sanitizeSurge(input?.surge, organizations, breakdowns, selectable) };
 }
 
 const quote = (v) => `"${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;

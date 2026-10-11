@@ -2,7 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseQuery } from '../src/engine.js';
 import { buildReport } from '../src/analysis.js';
-import { clientFieldList, dimensionsOf, autoInternalBreakdowns, jqlClause, jqlEmptyClause, sanitizeSettings } from '../src/settings.js';
+import { clientFieldList, DEFAULT_INTERNAL_SYNONYMS, DEFAULT_SETTINGS, dimensionsOf, autoInternalBreakdowns, jqlClause, jqlEmptyClause, patternSettingsFor, sanitizeSettings } from '../src/settings.js';
+
+test('internal reports have their own pattern settings', () => {
+  const s = sanitizeSettings({ minPatternSize: 5, synonyms: 'pinpad = bluepad', internalPatterns: { minPatternSize: 2, synonyms: 'vpn = remote access, anyconnect', placeholders: 'TBC\nN/A' } }, []);
+  assert.deepEqual(patternSettingsFor(s, false), { minPatternSize: 5, synonyms: [['pinpad', 'bluepad']], placeholders: s.placeholders });
+  assert.deepEqual(patternSettingsFor(s, true), { minPatternSize: 2, synonyms: [['vpn', 'remote access', 'anyconnect']], placeholders: ['TBC', 'N/A'] });
+  // Not set yet: internal defaults (IT words), not the customer ones.
+  assert.deepEqual(sanitizeSettings({}, []).internalPatterns.synonyms, DEFAULT_INTERNAL_SYNONYMS);
+  assert.deepEqual(patternSettingsFor({ ...DEFAULT_SETTINGS, internalPatterns: undefined }, true).synonyms, DEFAULT_INTERNAL_SYNONYMS);
+});
 import { backlogAges, busiestHours, effortRows, flowSummary, forecast, pastWeeks } from '../src/flow.js';
 
 const clientFields = [{ id: 'customfield_100', name: 'SD Client', kind: 'option' }, { id: 'customfield_200', name: 'Client', kind: 'option' }];
