@@ -41,6 +41,7 @@ function App() {
   const fieldName = (id) => state.fields?.find((f) => f.id === id)?.name || '';
   const [orgFilter, setOrgFilter] = useState('');
   const [checkNote, setCheckNote] = useState('');
+  const [clientSearch, setClientSearch] = useState('');
   const alerts = { ...DEFAULT_ALERTS, ...draft?.alerts };
   const setAlerts = (change) => { setSaved(false); setDraft((d) => ({ ...d, alerts: { ...DEFAULT_ALERTS, ...d.alerts, ...change } })); };
   // Watched organisations first, then matches for the filter (at most 50 listed).
@@ -107,7 +108,14 @@ function App() {
       <Card title="Internal analysis" description="The Internal tab analyses your own projects instead of customer organisations. Choose the fields that hold the client, so an analysis can be narrowed to a client and broken down by client. Different projects can use different fields (for example SD Client in SD and Client elsewhere).">
         <Field label={`Client fields (up to ${MAX_CLIENT_FIELDS})`} htmlFor="cs-client-fields"
           help="Select lists, checkboxes, cascading selects and labels can be used. A ticket's client is read from whichever of these it has.">
-          <div className="cs-orgs" id="cs-client-fields">{state.fields.filter((f) => /^customfield_/.test(f.id) && ['option', 'options', 'cascading', 'strings'].includes(f.kind)).map((f) => {
+          <input className="nq-input cs-field-search" placeholder="Search fields" aria-label="Search client fields" value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} />
+          <div className="cs-orgs" id="cs-client-fields">{(() => {
+            const chosen = (draft.clientFields || []).map((x) => x.id ?? x);
+            const term = clientSearch.trim().toLowerCase();
+            const usable = state.fields.filter((f) => /^customfield_/.test(f.id) && ['option', 'options', 'cascading', 'strings'].includes(f.kind));
+            // Ticked fields first, then matches for the search.
+            return [...usable.filter((f) => chosen.includes(f.id)), ...usable.filter((f) => !chosen.includes(f.id) && (!term || f.name.toLowerCase().includes(term)))];
+          })().map((f) => {
             const chosen = (draft.clientFields || []).map((x) => x.id ?? x);
             const on = chosen.includes(f.id);
             return <label className="cs-check" key={f.id}>

@@ -177,6 +177,7 @@ define('analyzeFlow', async ({ payload, context }) => {
     ...AGE_BANDS.map((days) => count(`${scope} AND statusCategory != Done AND created >= "-${days}d"`)),
   ]);
   const complete = ![...created, ...resolved, ...weekly, open, ...within].includes(null);
+  console.log(`analyzeFlow: ${query.internal ? 'internal' : 'customer'}, ${buckets.length} buckets, open ${open ?? '?'}${complete ? '' : ', incomplete (time limit)'}`);
   const nextMonday = new Date(Date.parse(`${weeks[weeks.length - 1].toExclusive}T00:00:00Z`) + 7 * 86400000).toISOString().slice(0, 10);
   return {
     complete,
@@ -435,7 +436,7 @@ define('saveSettings', async ({ payload, context }) => {
   if (settings.surge.enabled && settings.surge.createIssue) settings.surge.issueTypeId = await alertIssueType(settings.surge);
   await saveSettings(settings);
   const { alerts } = settings;
-  console.log(`saveSettings: ${settings.breakdowns.length} breakdowns, ${settings.headcounts.length} crew lists, surge ${settings.surge.enabled ? `on (${settings.surge.organizations.length} orgs, tickets ${settings.surge.createIssue ? settings.surge.projectKey : 'off'})` : 'off'}, portal ${settings.portalEnabled ? 'on' : 'off'}, alerts ${alerts.enabled ? `on (${alerts.organizations.length} orgs, tickets ${alerts.createIssue ? alerts.projectKey : 'off'})` : 'off'}`);
+  console.log(`saveSettings: ${settings.breakdowns.length} breakdowns, ${settings.clientFields.length} client fields, ${settings.headcounts.length} crew lists, surge ${settings.surge.enabled ? `on (${settings.surge.organizations.length} orgs, tickets ${settings.surge.createIssue ? settings.surge.projectKey : 'off'})` : 'off'}, portal ${settings.portalEnabled ? 'on' : 'off'}, alerts ${alerts.enabled ? `on (${alerts.organizations.length} orgs, tickets ${alerts.createIssue ? alerts.projectKey : 'off'})` : 'off'}`);
   return settings;
 });
 

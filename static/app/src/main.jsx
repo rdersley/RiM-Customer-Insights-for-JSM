@@ -235,9 +235,10 @@ function App() {
     finally { setLoadingReport(false); }
   }
 
-  // Internal mode: load the project list once, and suggest client values as the user types.
+  // Internal mode: load projects and client fields each time the tab opens (an
+  // admin may have just changed the client fields), and suggest client values.
   useEffect(() => {
-    if (!internal || projectList) return;
+    if (!internal) return;
     invoke('getProjects').then(setProjectList).catch((e) => setError(e.message || 'Projects could not be loaded.'));
   }, [internal]);
   useEffect(() => {
