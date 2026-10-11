@@ -34,7 +34,7 @@ export const DEFAULT_ALERTS = {
   issueTypeName: 'Task',
   issueTypeId: '',
 };
-export const DEFAULT_SETTINGS = { breakdowns: [], clientFields: [], headcounts: [], portalEnabled: false, minPatternSize: MIN_PATTERN.default, placeholders: DEFAULT_PLACEHOLDERS, synonyms: DEFAULT_SYNONYMS, alerts: DEFAULT_ALERTS, surge: DEFAULT_SURGE };
+export const DEFAULT_SETTINGS = { breakdowns: [], internalBreakdowns: [], clientFields: [], headcounts: [], portalEnabled: false, minPatternSize: MIN_PATTERN.default, placeholders: DEFAULT_PLACEHOLDERS, synonyms: DEFAULT_SYNONYMS, alerts: DEFAULT_ALERTS, surge: DEFAULT_SURGE };
 
 const whole = (value, { min, max, default: fallback }) => {
   const n = Number(value);
@@ -150,14 +150,20 @@ export function selectableFields(fields) {
 }
 
 /** Validates settings from the admin page against the site's selectable fields. */
-export function sanitizeSettings(input, selectable, organizations = []) {
-  const byId = new Map(selectable.map((f) => [f.id, f]));
+function breakdownList(input, byId, { portal = true } = {}) {
   const seen = new Set();
-  const breakdowns = (Array.isArray(input?.breakdowns) ? input.breakdowns : [])
-    .map((b) => byId.get(String(b?.id)) && { ...byId.get(String(b.id)), label: clip(b.label, 40) || byId.get(String(b.id)).name, portal: b.portal === true })
+  return (Array.isArray(input) ? input : [])
+    .map((b) => byId.get(String(b?.id)) && { ...byId.get(String(b.id)), label: clip(b.label, 40) || byId.get(String(b.id)).name, portal: portal && b.portal === true })
     .filter((b) => b && !seen.has(b.id) && seen.add(b.id))
     .slice(0, MAX_BREAKDOWNS);
-  return { breakdowns, clientFields: clientFieldList(input?.clientFields, selectable), headcounts: sanitizeHeadcounts(input?.headcounts, organizations, breakdowns), portalEnabled: input?.portalEnabled === true, minPatternSize: patternMinimum(input?.minPatternSize), placeholders: placeholderList(input?.placeholders), synonyms: synonymList(input?.synonyms), alerts: sanitizeAlerts(input?.alerts, organizations), surge: sanitizeSurge(input?.surge, organizations, breakdowns, selectable) };
+}
+
+export function sanitizeSettings(input, selectable, organizations = []) {
+  const byId = new Map(selectable.map((f) => [f.id, f]));
+  const breakdowns = breakdownList(input?.breakdowns, byId);
+  // Internal reports have their own breakdown fields (never on the portal).
+  const internalBreakdowns = breakdownList(input?.internalBreakdowns, byId, { portal: false });
+  return { breakdowns, internalBreakdowns, clientFields: clientFieldList(input?.clientFields, selectable), headcounts: sanitizeHeadcounts(input?.headcounts, organizations, breakdowns), portalEnabled: input?.portalEnabled === true, minPatternSize: patternMinimum(input?.minPatternSize), placeholders: placeholderList(input?.placeholders), synonyms: synonymList(input?.synonyms), alerts: sanitizeAlerts(input?.alerts, organizations), surge: sanitizeSurge(input?.surge, organizations, breakdowns, selectable) };
 }
 
 const quote = (v) => `"${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
@@ -231,7 +237,7 @@ export function clientFieldList(input, selectable = []) {
  * Breakdowns added to an internal analysis: by project when it covers several
  * (or all), and by client (from any client field) unless it is one client.
  */
-export function internalBreakdowns(payload, clientFields = []) {
+export function autoInternalBreakdowns(payload, clientFields = []) {
   const projects = Array.isArray(payload?.projects) ? payload.projects : [];
   const clients = Array.isArray(payload?.clients) ? payload.clients : [];
   const out = [];

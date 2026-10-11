@@ -6,10 +6,11 @@ import { createRoot } from 'react-dom/client';
 import { invoke, view } from '@forge/bridge';
 import '@retailinmotion/ui/css';
 import { enableTheme } from '@retailinmotion/ui/theme';
-import { ActionBar, AppHeader, Button, Card, Field, Footer, Loading, Notice } from '@retailinmotion/ui/react';
+import { ActionBar, AppHeader, Button, Card, Field, Footer, Loading, Notice, Tabs } from '@retailinmotion/ui/react';
 import { version } from '../../../package.json';
 import { MAX_CLIENT_FIELDS, ALERT_LIMITS, DEFAULT_ALERTS, DEFAULT_PLACEHOLDERS, DEFAULT_SYNONYMS, MAX_BREAKDOWNS, MAX_PLACEHOLDERS, MAX_WATCHED, MIN_PATTERN, SYNONYM_LIMITS } from '../../../src/settings.js';
 import BackupRestore from './BackupRestore.jsx';
+import BreakdownFields from './BreakdownFields.jsx';
 import CrewNumbers from './CrewNumbers.jsx';
 import SurgeSettings from './SurgeSettings.jsx';
 import PdfLogos from './PdfLogos.jsx';
@@ -38,10 +39,10 @@ function App() {
   }, []);
 
   const dirty = draft && state.settings && JSON.stringify(draft) !== JSON.stringify(state.settings);
-  const fieldName = (id) => state.fields?.find((f) => f.id === id)?.name || '';
   const [orgFilter, setOrgFilter] = useState('');
   const [checkNote, setCheckNote] = useState('');
   const [clientSearch, setClientSearch] = useState('');
+  const [tab, setTab] = useState('customers');
   const alerts = { ...DEFAULT_ALERTS, ...draft?.alerts };
   const setAlerts = (change) => { setSaved(false); setDraft((d) => ({ ...d, alerts: { ...DEFAULT_ALERTS, ...d.alerts, ...change } })); };
   // Watched organisations first, then matches for the filter (at most 50 listed).
@@ -51,10 +52,6 @@ function App() {
     const others = (state.organizations || []).filter((o) => !watched.some((w) => w.id === o.id) && (!term || o.name.toLowerCase().includes(term)));
     return [...watched.filter((o) => !term || o.name.toLowerCase().includes(term)), ...others.slice(0, 50)];
   })();
-  const setBreakdown = (index, change) => {
-    setSaved(false);
-    setDraft((d) => ({ ...d, breakdowns: d.breakdowns.map((b, i) => (i === index ? { ...b, ...change } : b)) }));
-  };
 
   async function save() {
     setSaving(true); setError('');
@@ -74,85 +71,15 @@ function App() {
     {error && <Notice kind="error" title="Settings weren’t saved.">{error}</Notice>}
 
     {draft && <>
-      <Card title="Breakdown fields" description={`Reports show tickets and each issue split by these fields, for example base or device type. Up to ${MAX_BREAKDOWNS}.`}>
-        <div className="nq-stack">
-          {draft.breakdowns.map((b, index) => <div className="cs-row" key={index}>
-            <Field label="Field" htmlFor={`cs-field-${index}`}>
-              <select id={`cs-field-${index}`} className="nq-select" value={b.id}
-                onChange={(e) => setBreakdown(index, { id: e.target.value, label: fieldName(e.target.value) })}>
-                {state.fields.map((f) => <option key={f.id} value={f.id}
-                  disabled={f.id !== b.id && draft.breakdowns.some((x) => x.id === f.id)}>{f.name}</option>)}
-              </select>
-            </Field>
-            <Field label="Shown as" htmlFor={`cs-label-${index}`}>
-              <input id={`cs-label-${index}`} className="nq-input" maxLength={40} value={b.label} onChange={(e) => setBreakdown(index, { label: e.target.value })} />
-            </Field>
-            <label className="cs-check cs-portal" title="Customers see this breakdown in published portal reports">
-              <input type="checkbox" className="nq-check" checked={b.portal === true} onChange={(e) => setBreakdown(index, { portal: e.target.checked })} />
-              <span>Show on portal</span>
-            </label>
-            <Button appearance="subtle" small onClick={() => { setSaved(false); setDraft((d) => ({ ...d, breakdowns: d.breakdowns.filter((_, i) => i !== index) })); }}>Remove</Button>
-          </div>)}
-          {!draft.breakdowns.length && <p className="nq-muted">No breakdown fields yet. Reports still show patterns and trends.</p>}
-          {draft.breakdowns.length < MAX_BREAKDOWNS && state.fields.length > 0 && <div>
-            <Button small onClick={() => {
-              setSaved(false);
-              const next = state.fields.find((f) => !draft.breakdowns.some((b) => b.id === f.id));
-              if (next) setDraft((d) => ({ ...d, breakdowns: [...d.breakdowns, { id: next.id, label: next.name }] }));
-            }}>Add a field</Button>
-          </div>}
-          <p className="nq-muted">Only fields that hold choices can be used: select lists, checkboxes, radio buttons, cascading selects, labels, components, priority and request type.</p>
-        </div>
-      </Card>
+      <div className="cs-tabs"><Tabs items={[{ id: 'customers', label: 'Customers' }, { id: 'internal', label: 'Internal' }, { id: 'general', label: 'General' }]} active={tab} onChange={setTab} /></div>
 
-      <Card title="Internal analysis" description="The Internal tab analyses your own projects instead of customer organisations. Choose the fields that hold the client, so an analysis can be narrowed to a client and broken down by client. Different projects can use different fields (for example SD Client in SD and Client elsewhere).">
-        <Field label={`Client fields (up to ${MAX_CLIENT_FIELDS})`} htmlFor="cs-client-fields"
-          help="Select lists, checkboxes, cascading selects and labels can be used. A ticket's client is read from whichever of these it has.">
-          <input className="nq-input cs-field-search" placeholder="Search fields" aria-label="Search client fields" value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} />
-          <div className="cs-orgs" id="cs-client-fields">{(() => {
-            const chosen = (draft.clientFields || []).map((x) => x.id ?? x);
-            const term = clientSearch.trim().toLowerCase();
-            const usable = state.fields.filter((f) => /^customfield_/.test(f.id) && ['option', 'options', 'cascading', 'strings'].includes(f.kind));
-            // Ticked fields first, then matches for the search.
-            return [...usable.filter((f) => chosen.includes(f.id)), ...usable.filter((f) => !chosen.includes(f.id) && (!term || f.name.toLowerCase().includes(term)))];
-          })().map((f) => {
-            const chosen = (draft.clientFields || []).map((x) => x.id ?? x);
-            const on = chosen.includes(f.id);
-            return <label className="cs-check" key={f.id}>
-              <input type="checkbox" className="nq-check" checked={on} disabled={!on && chosen.length >= MAX_CLIENT_FIELDS}
-                onChange={(e) => { setSaved(false); setDraft((d) => ({ ...d, clientFields: e.target.checked ? [...chosen, f.id] : chosen.filter((id) => id !== f.id) })); }} />
-              <span>{f.name}</span>
-            </label>;
-          })}</div>
-        </Field>
-      </Card>
+      {tab === 'customers' && <>
+      <BreakdownFields id="cs-bd" title="Breakdown fields" showPortal fields={state.fields}
+        description={`Customer reports show tickets and each issue split by these fields, for example base or device type. Up to ${MAX_BREAKDOWNS}.`}
+        list={draft.breakdowns} onChange={(breakdowns) => { setSaved(false); setDraft((d) => ({ ...d, breakdowns })); }} />
 
       <CrewNumbers headcounts={draft.headcounts || []} organizations={state.organizations || []} breakdowns={state.settings.breakdowns} portalEnabled={draft.portalEnabled === true}
         onChange={(headcounts) => { setSaved(false); setDraft((d) => ({ ...d, headcounts })); }} />
-
-      <Card title="Patterns" description="How tickets are grouped into recurring issues.">
-        <Field label="Minimum tickets per pattern" htmlFor="cs-min-pattern"
-          help={`Between ${MIN_PATTERN.min} and ${MIN_PATTERN.max}. Higher numbers show fewer, more established issues. For large customers this counts tickets in the analysed sample.`}>
-          <input id="cs-min-pattern" className="nq-input cs-number" type="number" min={MIN_PATTERN.min} max={MIN_PATTERN.max} step={1}
-            value={draft.minPatternSize ?? MIN_PATTERN.default}
-            onChange={(e) => { setSaved(false); setDraft((d) => ({ ...d, minPatternSize: Number(e.target.value) })); }} />
-        </Field>
-        <Field label="Words that mean the same" htmlFor="cs-synonyms"
-          help={`One list per line, for example “pinpad = bluepad, pin pad, card reader”. Tickets using any of them group together under the first word. Up to ${SYNONYM_LIMITS.groups} lines; capital letters, hyphens and plurals don’t matter.`}>
-          <textarea id="cs-synonyms" className="nq-textarea" rows={5}
-            value={synonymText(draft.synonyms ?? DEFAULT_SYNONYMS)}
-            onChange={(e) => { setSaved(false); setDraft((d) => ({ ...d, synonyms: e.target.value })); }} />
-        </Field>
-      </Card>
-
-      <Card title="Data quality" description="Breakdown values that mean nobody filled the field in. Reports count them, with tickets that have no value, so you can track the clean-up.">
-        <Field label="Placeholder values" htmlFor="cs-placeholders"
-          help={`One per line or separated by commas, up to ${MAX_PLACEHOLDERS}. Matching ignores capital letters and extra spaces.`}>
-          <textarea id="cs-placeholders" className="nq-textarea" rows={4}
-            value={Array.isArray(draft.placeholders) ? draft.placeholders.join('\n') : (draft.placeholders ?? DEFAULT_PLACEHOLDERS.join('\n'))}
-            onChange={(e) => { setSaved(false); setDraft((d) => ({ ...d, placeholders: e.target.value })); }} />
-        </Field>
-      </Card>
 
       <Card title="Spike alerts" description="Once a day, compare each watched organisation’s last 7 days with the 7 before. Patterns that jump show as alerts in Customer Insights.">
         <div className="nq-stack">
@@ -227,14 +154,74 @@ function App() {
         <p className="nq-muted">Off by default. While it’s off, “Service report” in the portal menu tells customers reports aren’t available, and nothing is published.</p>
       </Card>
 
+      <PdfLogos invoke={invoke} organizations={state.organizations || []} />
+
+      </>}
+
+      {tab === 'internal' && <>
+      <Card title="Client fields" description="The Internal tab analyses your own projects instead of customer organisations. Choose the fields that hold the client, so an analysis can be narrowed to a client and broken down by client. Different projects can use different fields (for example SD Client in SD and Client elsewhere).">
+        <Field label={`Client fields (up to ${MAX_CLIENT_FIELDS})`} htmlFor="cs-client-fields"
+          help="Select lists, checkboxes, cascading selects and labels can be used. A ticket's client is read from whichever of these it has.">
+          <input className="nq-input cs-field-search" placeholder="Search fields" aria-label="Search client fields" value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} />
+          <div className="cs-orgs" id="cs-client-fields">{(() => {
+            const chosen = (draft.clientFields || []).map((x) => x.id ?? x);
+            const term = clientSearch.trim().toLowerCase();
+            const usable = state.fields.filter((f) => /^customfield_/.test(f.id) && ['option', 'options', 'cascading', 'strings'].includes(f.kind));
+            // Ticked fields first, then matches for the search.
+            return [...usable.filter((f) => chosen.includes(f.id)), ...usable.filter((f) => !chosen.includes(f.id) && (!term || f.name.toLowerCase().includes(term)))];
+          })().map((f) => {
+            const chosen = (draft.clientFields || []).map((x) => x.id ?? x);
+            const on = chosen.includes(f.id);
+            return <label className="cs-check" key={f.id}>
+              <input type="checkbox" className="nq-check" checked={on} disabled={!on && chosen.length >= MAX_CLIENT_FIELDS}
+                onChange={(e) => { setSaved(false); setDraft((d) => ({ ...d, clientFields: e.target.checked ? [...chosen, f.id] : chosen.filter((id) => id !== f.id) })); }} />
+              <span>{f.name}</span>
+            </label>;
+          })}</div>
+        </Field>
+      </Card>
+
+      <BreakdownFields id="cs-ibd" title="Breakdown fields" fields={state.fields}
+        description={`Internal reports show tickets and each issue split by these fields, for example team, component or category. Project and Client are added automatically. Up to ${MAX_BREAKDOWNS}.`}
+        list={draft.internalBreakdowns || []} onChange={(internalBreakdowns) => { setSaved(false); setDraft((d) => ({ ...d, internalBreakdowns })); }} />
+
+      </>}
+
+      {tab === 'general' && <>
+      <Card title="Patterns" description="How tickets are grouped into recurring issues.">
+        <Field label="Minimum tickets per pattern" htmlFor="cs-min-pattern"
+          help={`Between ${MIN_PATTERN.min} and ${MIN_PATTERN.max}. Higher numbers show fewer, more established issues. For large customers this counts tickets in the analysed sample.`}>
+          <input id="cs-min-pattern" className="nq-input cs-number" type="number" min={MIN_PATTERN.min} max={MIN_PATTERN.max} step={1}
+            value={draft.minPatternSize ?? MIN_PATTERN.default}
+            onChange={(e) => { setSaved(false); setDraft((d) => ({ ...d, minPatternSize: Number(e.target.value) })); }} />
+        </Field>
+        <Field label="Words that mean the same" htmlFor="cs-synonyms"
+          help={`One list per line, for example “pinpad = bluepad, pin pad, card reader”. Tickets using any of them group together under the first word. Up to ${SYNONYM_LIMITS.groups} lines; capital letters, hyphens and plurals don’t matter.`}>
+          <textarea id="cs-synonyms" className="nq-textarea" rows={5}
+            value={synonymText(draft.synonyms ?? DEFAULT_SYNONYMS)}
+            onChange={(e) => { setSaved(false); setDraft((d) => ({ ...d, synonyms: e.target.value })); }} />
+        </Field>
+      </Card>
+
+      <Card title="Data quality" description="Breakdown values that mean nobody filled the field in. Reports count them, with tickets that have no value, so you can track the clean-up.">
+        <Field label="Placeholder values" htmlFor="cs-placeholders"
+          help={`One per line or separated by commas, up to ${MAX_PLACEHOLDERS}. Matching ignores capital letters and extra spaces.`}>
+          <textarea id="cs-placeholders" className="nq-textarea" rows={4}
+            value={Array.isArray(draft.placeholders) ? draft.placeholders.join('\n') : (draft.placeholders ?? DEFAULT_PLACEHOLDERS.join('\n'))}
+            onChange={(e) => { setSaved(false); setDraft((d) => ({ ...d, placeholders: e.target.value })); }} />
+        </Field>
+      </Card>
+
+      </>}
+
       <ActionBar state={saving ? 'Saving…' : dirty ? 'Unsaved changes' : saved ? 'Saved' : ''}>
         <Button appearance="subtle" disabled={!dirty || saving} onClick={() => { setDraft(state.settings); setSaved(false); }}>Discard</Button>
         <Button appearance="primary" disabled={!dirty || saving} onClick={save}>Save</Button>
       </ActionBar>
 
-      <PdfLogos invoke={invoke} organizations={state.organizations || []} />
-
+      {tab === 'general' && <>
       <BackupRestore invoke={invoke} app="Customer Insights" filePrefix="retailinmotion-customer-insights" />
+      </>}
     </>}
     <Footer product={PRODUCT} version={version} />
   </div>;

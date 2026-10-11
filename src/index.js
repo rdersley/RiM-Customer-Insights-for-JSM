@@ -13,7 +13,7 @@ import { MAX_ORG_LOGOS, sanitizeLogo } from './logos.js';
 import { headcountFor, orgsOf } from './headcount.js';
 import { isLive, liveConfigFrom } from './live.js';
 import { queueAlertCheck, queueRefresh } from './liveJobs.js';
-import { internalBreakdowns, organisationBreakdown, sanitizeSettings, selectableFields } from './settings.js';
+import { autoInternalBreakdowns, organisationBreakdown, sanitizeSettings, selectableFields } from './settings.js';
 import { problemFields, problemRequest, relatesLinkType } from './problem.js';
 
 // This package is "type": "module"; Forge's bundler then hands CommonJS packages
@@ -103,8 +103,8 @@ const DESCRIPTION_CHARS = 600;
  * for an internal analysis.
  */
 async function breakdownsFor(payload) {
-  const { breakdowns, clientFields } = await loadSettings();
-  if (payload?.scope === 'internal') return [...internalBreakdowns(payload, clientFields || []), ...breakdowns];
+  const { breakdowns, internalBreakdowns, clientFields } = await loadSettings();
+  if (payload?.scope === 'internal') return [...autoInternalBreakdowns(payload, clientFields || []), ...(internalBreakdowns || [])];
   const organisations = organisationsOf(payload);
   if (organisations.length < 2) return breakdowns;
   const response = await asUser().requestJira(route`/rest/api/3/field`, { headers: { Accept: 'application/json' } });
@@ -436,7 +436,7 @@ define('saveSettings', async ({ payload, context }) => {
   if (settings.surge.enabled && settings.surge.createIssue) settings.surge.issueTypeId = await alertIssueType(settings.surge);
   await saveSettings(settings);
   const { alerts } = settings;
-  console.log(`saveSettings: ${settings.breakdowns.length} breakdowns, ${settings.clientFields.length} client fields, ${settings.headcounts.length} crew lists, surge ${settings.surge.enabled ? `on (${settings.surge.organizations.length} orgs, tickets ${settings.surge.createIssue ? settings.surge.projectKey : 'off'})` : 'off'}, portal ${settings.portalEnabled ? 'on' : 'off'}, alerts ${alerts.enabled ? `on (${alerts.organizations.length} orgs, tickets ${alerts.createIssue ? alerts.projectKey : 'off'})` : 'off'}`);
+  console.log(`saveSettings: ${settings.breakdowns.length} breakdowns, ${settings.internalBreakdowns.length} internal breakdowns, ${settings.clientFields.length} client fields, ${settings.headcounts.length} crew lists, surge ${settings.surge.enabled ? `on (${settings.surge.organizations.length} orgs, tickets ${settings.surge.createIssue ? settings.surge.projectKey : 'off'})` : 'off'}, portal ${settings.portalEnabled ? 'on' : 'off'}, alerts ${alerts.enabled ? `on (${alerts.organizations.length} orgs, tickets ${alerts.createIssue ? alerts.projectKey : 'off'})` : 'off'}`);
   return settings;
 });
 

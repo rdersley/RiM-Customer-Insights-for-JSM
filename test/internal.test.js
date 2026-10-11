@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseQuery } from '../src/engine.js';
 import { buildReport } from '../src/analysis.js';
-import { clientFieldList, dimensionsOf, internalBreakdowns, jqlClause, jqlEmptyClause, sanitizeSettings } from '../src/settings.js';
+import { clientFieldList, dimensionsOf, autoInternalBreakdowns, jqlClause, jqlEmptyClause, sanitizeSettings } from '../src/settings.js';
 import { backlogAges, busiestHours, effortRows, flowSummary, forecast, pastWeeks } from '../src/flow.js';
 
 const clientFields = [{ id: 'customfield_100', name: 'SD Client', kind: 'option' }, { id: 'customfield_200', name: 'Client', kind: 'option' }];
@@ -37,14 +37,21 @@ test('client fields: choice custom fields only; Project and Client breakdowns fo
   const selectable = [...clientFields, { id: 'labels', name: 'Labels', kind: 'strings' }, { id: 'customfield_300', name: 'Team', kind: 'named' }];
   assert.deepEqual(clientFieldList(['customfield_100', 'labels', 'customfield_300', 'customfield_200', 'customfield_100'], selectable), clientFields);
   assert.deepEqual(sanitizeSettings({ clientFields: ['customfield_200'] }, selectable).clientFields, [clientFields[1]]);
-  assert.deepEqual(internalBreakdowns({ projects: ['SD', 'IT'], clients: [] }, clientFields).map((b) => b.id), ['project', 'client']);
-  assert.deepEqual(internalBreakdowns({ projects: ['SD'], clients: ['Ryanair'] }, clientFields), []);
-  const client = internalBreakdowns({ projects: [] }, clientFields)[1];
+  assert.deepEqual(autoInternalBreakdowns({ projects: ['SD', 'IT'], clients: [] }, clientFields).map((b) => b.id), ['project', 'client']);
+  assert.deepEqual(autoInternalBreakdowns({ projects: ['SD'], clients: ['Ryanair'] }, clientFields), []);
+  const client = autoInternalBreakdowns({ projects: [] }, clientFields)[1];
   assert.deepEqual(dimensionsOf({ fields: { customfield_200: { value: 'Jet2' } } }, [client]), { client: ['Jet2'] });
   assert.deepEqual(dimensionsOf({ fields: { customfield_100: { value: 'Ryanair' } } }, [client]), { client: ['Ryanair'] });
   assert.equal(jqlClause(client, 'Jet2'), '(cf[100] = "Jet2" OR cf[200] = "Jet2")');
   assert.equal(jqlEmptyClause(client), 'cf[100] is EMPTY AND cf[200] is EMPTY');
   assert.equal(jqlClause({ id: 'project', kind: 'named' }, 'IT Help'), 'project = "IT Help"');
+});
+
+test('internal reports have their own breakdown fields, never shown on the portal', () => {
+  const selectable = [{ id: 'customfield_1', name: 'Base', kind: 'option' }, { id: 'components', name: 'Components', kind: 'named' }];
+  const s = sanitizeSettings({ breakdowns: [{ id: 'customfield_1', label: 'Base', portal: true }], internalBreakdowns: [{ id: 'components', label: 'Team', portal: true }, { id: 'nope' }] }, selectable);
+  assert.deepEqual(s.breakdowns.map((b) => [b.id, b.portal]), [['customfield_1', true]]);
+  assert.deepEqual(s.internalBreakdowns.map((b) => [b.id, b.label, b.portal]), [['components', 'Team', false]]);
 });
 
 const issue = (key, summary, created, { timespent = 0, resolved = null } = {}) => ({ key, fields: { summary, description: '', created, resolutiondate: resolved, status: { name: resolved ? 'Done' : 'Open' }, timespent } });
