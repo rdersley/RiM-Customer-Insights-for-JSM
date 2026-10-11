@@ -45,7 +45,7 @@ export const DEFAULT_ALERTS = {
   issueTypeName: 'Task',
   issueTypeId: '',
 };
-export const DEFAULT_SETTINGS = { breakdowns: [], internalBreakdowns: [], slaFields: [], internalPatterns: { minPatternSize: MIN_PATTERN.default, synonyms: DEFAULT_INTERNAL_SYNONYMS, placeholders: DEFAULT_PLACEHOLDERS }, clientFields: [], headcounts: [], portalEnabled: false, minPatternSize: MIN_PATTERN.default, placeholders: DEFAULT_PLACEHOLDERS, synonyms: DEFAULT_SYNONYMS, alerts: DEFAULT_ALERTS, surge: DEFAULT_SURGE };
+export const DEFAULT_SETTINGS = { breakdowns: [], internalBreakdowns: [], projectProfiles: [], slaFields: [], internalPatterns: { minPatternSize: MIN_PATTERN.default, synonyms: DEFAULT_INTERNAL_SYNONYMS, placeholders: DEFAULT_PLACEHOLDERS }, clientFields: [], headcounts: [], portalEnabled: false, minPatternSize: MIN_PATTERN.default, placeholders: DEFAULT_PLACEHOLDERS, synonyms: DEFAULT_SYNONYMS, alerts: DEFAULT_ALERTS, surge: DEFAULT_SURGE };
 
 const whole = (value, { min, max, default: fallback }) => {
   const n = Number(value);
@@ -116,6 +116,46 @@ export function patternSettingsFor(settings, internal) {
   return { minPatternSize: source.minPatternSize, synonyms: source.synonyms, placeholders: source.placeholders };
 }
 
+export const MAX_PROJECT_PROFILES = 20;
+const PROJECT_KEY = /^[A-Z][A-Z0-9_]{0,49}$/;
+
+/** Internal pattern and data quality settings, with IT defaults. */
+function internalPatternsOf(ip = {}) {
+  return {
+    minPatternSize: patternMinimum(ip?.minPatternSize),
+    synonyms: synonymList(ip?.synonyms, DEFAULT_INTERNAL_SYNONYMS),
+    placeholders: placeholderList(ip?.placeholders),
+  };
+}
+
+/**
+ * The settings an analysis uses. Customer analyses use the customer settings.
+ * An internal one uses the project settings that every chosen project shares,
+ * or the default internal settings (no projects chosen, projects without their
+ * own settings, or projects with different ones).
+ */
+export function analysisConfig(settings, payload) {
+  const s = { ...DEFAULT_SETTINGS, ...settings };
+  if (payload?.scope !== 'internal') {
+    return { profile: null, breakdowns: s.breakdowns || [], clientFields: [], slaFields: s.slaFields || [], patterns: patternSettingsFor(s, false) };
+  }
+  const projects = (Array.isArray(payload?.projects) ? payload.projects : []).map((k) => String(k).toUpperCase());
+  const owners = projects.map((k) => (s.projectProfiles || []).find((p) => p.projects.includes(k)) || null);
+  const profile = projects.length && owners[0] && owners.every((p) => p === owners[0]) ? owners[0] : null;
+  if (profile) {
+    return { profile: { id: profile.id, name: profile.name }, breakdowns: profile.breakdowns, clientFields: profile.clientFields, slaFields: profile.slaFields, patterns: { ...profile.patterns } };
+  }
+  const mixed = owners.some(Boolean);
+  return { profile: null, mixed, breakdowns: s.internalBreakdowns || [], clientFields: s.clientFields || [], slaFields: s.slaFields || [], patterns: patternSettingsFor(s, true) };
+}
+
+/** Every client field in any internal settings (for the client picker). */
+export const allClientFields = (settings) => {
+  const seen = new Set();
+  return [...(settings?.clientFields || []), ...(settings?.projectProfiles || []).flatMap((p) => p.clientFields || [])]
+    .filter((f) => !seen.has(f.id) && seen.add(f.id));
+};
+
 /** A pattern minimum within range; anything else falls back to the default. */
 export function patternMinimum(value) {
   const n = Number(value);
@@ -181,13 +221,28 @@ export function sanitizeSettings(input, selectable, organizations = [], { slaCho
   // Internal reports have their own breakdown fields (never on the portal).
   const internalBreakdowns = breakdownList(input?.internalBreakdowns, byId, { portal: false });
   // Internal reports have their own pattern and data quality settings.
-  const ip = input?.internalPatterns || {};
-  const internalPatterns = {
-    minPatternSize: patternMinimum(ip.minPatternSize),
-    synonyms: synonymList(ip.synonyms, DEFAULT_INTERNAL_SYNONYMS),
-    placeholders: placeholderList(ip.placeholders),
-  };
-  return { breakdowns, internalBreakdowns, internalPatterns, slaFields: slaFieldList(input?.slaFields, slaChoices), clientFields: clientFieldList(input?.clientFields, selectable), headcounts: sanitizeHeadcounts(input?.headcounts, organizations, breakdowns), portalEnabled: input?.portalEnabled === true, minPatternSize: patternMinimum(input?.minPatternSize), placeholders: placeholderList(input?.placeholders), synonyms: synonymList(input?.synonyms), alerts: sanitizeAlerts(input?.alerts, organizations), surge: sanitizeSurge(input?.surge, organizations, breakdowns, selectable) };
+  const internalPatterns = internalPatternsOf(input?.internalPatterns);
+  // Settings for particular projects (IT Help, SD…); a project is in one set.
+  const used = new Set();
+  const projectProfiles = (Array.isArray(input?.projectProfiles) ? input.projectProfiles : [])
+    .map((p) => {
+      const name = clip(p?.name, 60);
+      const projects = [...new Set((Array.isArray(p?.projects) ? p.projects : []).map((k) => clip(k, 50).toUpperCase()))]
+        .filter((k) => PROJECT_KEY.test(k) && !used.has(k) && used.add(k)).slice(0, 50);
+      if (!name || !projects.length) return null;
+      return {
+        id: /^[a-z0-9-]{4,40}$/.test(String(p?.id)) ? String(p.id) : `p-${projects[0].toLowerCase()}-${Math.random().toString(36).slice(2, 7)}`,
+        name,
+        projects,
+        breakdowns: breakdownList(p?.breakdowns, byId, { portal: false }),
+        clientFields: clientFieldList(p?.clientFields, selectable),
+        slaFields: slaFieldList(p?.slaFields, slaChoices),
+        patterns: internalPatternsOf(p?.patterns),
+      };
+    })
+    .filter(Boolean)
+    .slice(0, MAX_PROJECT_PROFILES);
+  return { breakdowns, internalBreakdowns, internalPatterns, projectProfiles, slaFields: slaFieldList(input?.slaFields, slaChoices), clientFields: clientFieldList(input?.clientFields, selectable), headcounts: sanitizeHeadcounts(input?.headcounts, organizations, breakdowns), portalEnabled: input?.portalEnabled === true, minPatternSize: patternMinimum(input?.minPatternSize), placeholders: placeholderList(input?.placeholders), synonyms: synonymList(input?.synonyms), alerts: sanitizeAlerts(input?.alerts, organizations), surge: sanitizeSurge(input?.surge, organizations, breakdowns, selectable) };
 }
 
 const quote = (v) => `"${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;

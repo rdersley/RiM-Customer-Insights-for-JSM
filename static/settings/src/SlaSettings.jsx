@@ -3,9 +3,9 @@ import React from 'react';
 import { Card } from '@retailinmotion/ui/react';
 import { MAX_SLA_FIELDS } from '../../../src/sla.js';
 
-export default function SlaSettings({ value = [], choices = [], onChange }) {
+export default function SlaSettings({ value = [], choices = [], onChange, scope = 'default' }) {
   const chosen = value.map((x) => x.id ?? x);
-  return <Card title="SLAs" description={`Reports on both tabs show how tickets did against these service project SLAs: the share met, the recurring issues that breach most, and the breakdown values (such as teams) with the highest breach rate. Up to ${MAX_SLA_FIELDS}.`}>
+  return <Card title="SLAs" description={`${scope === 'project' ? 'Internal reports for these projects' : 'Customer reports, and internal reports without project settings,'} show how tickets did against these service project SLAs: the share met, the recurring issues that breach most, and the breakdown values (such as teams) with the highest breach rate. Up to ${MAX_SLA_FIELDS}.`}>
     {choices.length
       ? <div className="cs-orgs">{choices.map((f) => {
         const on = chosen.includes(f.id);

@@ -709,6 +709,13 @@ function App() {
 
     {error && <Notice kind="error" title="We couldn’t complete that request.">{error}</Notice>}
 
+    {report?.settingsUsed && <p className="nq-muted">
+      {report.settingsUsed.profile
+        ? <>Using the <strong>{report.settingsUsed.profile.name}</strong> project settings (breakdowns, SLAs and patterns).</>
+        : report.settingsUsed.mixed
+          ? 'Using the default internal settings: the chosen projects have different project settings. Analyse them separately to use their own.'
+          : 'Using the default internal settings.'}
+    </p>}
     {filter && <Notice>
       <div className="nq-spread">
         <span>Showing only tickets where <strong>{filter.label}</strong> is <strong>{filter.value}</strong>.</span>

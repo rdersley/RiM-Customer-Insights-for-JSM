@@ -13,7 +13,7 @@ import { MAX_ORG_LOGOS, sanitizeLogo } from './logos.js';
 import { headcountFor, orgsOf } from './headcount.js';
 import { isLive, liveConfigFrom } from './live.js';
 import { queueAlertCheck, queueRefresh } from './liveJobs.js';
-import { autoInternalBreakdowns, organisationBreakdown, patternSettingsFor, sanitizeSettings, selectableFields } from './settings.js';
+import { allClientFields, analysisConfig, autoInternalBreakdowns, organisationBreakdown, sanitizeSettings, selectableFields } from './settings.js';
 import { problemFields, problemRequest, relatesLinkType } from './problem.js';
 import { slaFieldChoices, slaState } from './sla.js';
 import { searchWords } from './surge.js';
@@ -104,9 +104,13 @@ const DESCRIPTION_CHARS = 600;
  * several organisations (limited to those selected), or Project and Client
  * for an internal analysis.
  */
-async function breakdownsFor(payload) {
-  const { breakdowns, internalBreakdowns, clientFields } = await loadSettings();
-  if (payload?.scope === 'internal') return [...autoInternalBreakdowns(payload, clientFields || []), ...(internalBreakdowns || [])];
+async function breakdownsFor(payload, settings = null) {
+  const s = settings || await loadSettings();
+  const { breakdowns } = s;
+  if (payload?.scope === 'internal') {
+    const config = analysisConfig(s, payload);
+    return [...autoInternalBreakdowns(payload, config.clientFields), ...config.breakdowns];
+  }
   const organisations = organisationsOf(payload);
   if (organisations.length < 2) return breakdowns;
   const response = await asUser().requestJira(route`/rest/api/3/field`, { headers: { Accept: 'application/json' } });
@@ -116,9 +120,11 @@ async function breakdownsFor(payload) {
 
 define('fetchTickets', async ({ payload, context }) => {
   if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
-  const breakdowns = await breakdownsFor(payload);
-  const { clientFields, slaFields = [] } = await loadSettings();
-  const query = parseQuery(payload, filterFor(payload?.filter, breakdowns), { clientFields: clientFields || [] });
+  const settings = await loadSettings();
+  const breakdowns = await breakdownsFor(payload, settings);
+  const { slaFields } = analysisConfig(settings, payload);
+  // Clients are matched in every client field, whichever settings apply.
+  const query = parseQuery(payload, filterFor(payload?.filter, breakdowns), { clientFields: allClientFields(settings) });
   const { from, toExclusive } = payload;
   if (!ISO_DATE.test(from || '') || !ISO_DATE.test(toExclusive || '') || from < query.previousStart || toExclusive > query.endExclusive || from >= toExclusive) {
     throw new Error('Invalid ticket range.');
@@ -154,12 +160,14 @@ define('fetchTickets', async ({ payload, context }) => {
 define('analyze', async ({ payload, context }) => {
   if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
   const settings = await loadSettings();
-  const { clientFields } = settings;
-  const { minPatternSize, placeholders, synonyms } = patternSettingsFor(settings, payload?.scope === 'internal');
-  const breakdowns = await breakdownsFor(payload);
-  const query = parseQuery(payload, filterFor(payload?.filter, breakdowns), { clientFields: clientFields || [] });
+  // Customer settings, or the internal settings for these projects.
+  const config = analysisConfig(settings, payload);
+  const { minPatternSize, placeholders, synonyms } = config.patterns;
+  const breakdowns = await breakdownsFor(payload, settings);
+  const query = parseQuery(payload, filterFor(payload?.filter, breakdowns), { clientFields: allClientFields(settings) });
   // Resolvers are killed at 25s; runAnalysis stops starting new fetches after the budget.
-  return runAnalysis(query, { breakdowns, minPatternSize, placeholders, synonyms, slaFields: settings.slaFields || [], mode: 'user', budgetMs: FETCH_BUDGET_MS });
+  const report = await runAnalysis(query, { breakdowns, minPatternSize, placeholders, synonyms, slaFields: config.slaFields, mode: 'user', budgetMs: FETCH_BUDGET_MS });
+  return { ...report, settingsUsed: payload?.scope === 'internal' ? { profile: config.profile, mixed: Boolean(config.mixed) } : null };
 });
 
 // Flow and workload planning (src/flow.js), separate from analyze so it gets its
@@ -168,9 +176,9 @@ define('analyze', async ({ payload, context }) => {
 const FLOW_BUDGET_MS = 20000;
 define('analyzeFlow', async ({ payload, context }) => {
   if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
-  const { clientFields } = await loadSettings();
-  const breakdowns = await breakdownsFor(payload);
-  const query = parseQuery(payload, filterFor(payload?.filter, breakdowns), { clientFields: clientFields || [] });
+  const settings = await loadSettings();
+  const breakdowns = await breakdownsFor(payload, settings);
+  const query = parseQuery(payload, filterFor(payload?.filter, breakdowns), { clientFields: allClientFields(settings) });
   const deadline = Date.now() + FLOW_BUDGET_MS;
   const count = (jql) => (Date.now() > deadline ? Promise.resolve(null) : countIssues(jql, 'user'));
   const scope = query.scopeJql;
@@ -241,15 +249,15 @@ define('getProjects', async ({ context }) => {
     projects.push(...(page.values || []).map((p) => ({ key: String(p.key), name: String(p.name) })));
     if (page.isLast || !page.values?.length) break;
   }
-  return { projects, clientFields: ((await loadSettings()).clientFields || []).map((f) => ({ id: f.id, name: f.name })) };
+  return { projects, clientFields: allClientFields(await loadSettings()).map((f) => ({ id: f.id, name: f.name })) };
 });
 
 // Values for the client picker, from Jira's JQL autocomplete for each client field.
 define('suggestClients', async ({ payload, context }) => {
   if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
   const text = String(payload?.text ?? '').slice(0, 60);
-  const { clientFields } = await loadSettings();
-  const lists = await pool((clientFields || []).map((f) => async () => {
+  const clientFields = allClientFields(await loadSettings());
+  const lists = await pool(clientFields.map((f) => async () => {
     const n = /^customfield_(\d+)$/.exec(f.id)?.[1];
     if (!n) return [];
     const response = await asUser().requestJira(route`/rest/api/3/jql/autocompletedata/suggestions?fieldName=${`cf[${n}]`}&fieldValue=${text}`, { headers: { Accept: 'application/json' } });
@@ -486,7 +494,7 @@ define('saveSettings', async ({ payload, context }) => {
   if (settings.surge.enabled && settings.surge.createIssue) settings.surge.issueTypeId = await alertIssueType(settings.surge);
   await saveSettings(settings);
   const { alerts } = settings;
-  console.log(`saveSettings: ${settings.breakdowns.length} breakdowns, ${settings.internalBreakdowns.length} internal breakdowns, ${settings.slaFields.length} SLAs, ${settings.clientFields.length} client fields, ${settings.headcounts.length} crew lists, surge ${settings.surge.enabled ? `on (${settings.surge.organizations.length} orgs, tickets ${settings.surge.createIssue ? settings.surge.projectKey : 'off'})` : 'off'}, portal ${settings.portalEnabled ? 'on' : 'off'}, alerts ${alerts.enabled ? `on (${alerts.organizations.length} orgs, tickets ${alerts.createIssue ? alerts.projectKey : 'off'})` : 'off'}`);
+  console.log(`saveSettings: ${settings.breakdowns.length} breakdowns, ${settings.internalBreakdowns.length} internal breakdowns, ${settings.projectProfiles.length} project settings, ${settings.slaFields.length} SLAs, ${settings.clientFields.length} client fields, ${settings.headcounts.length} crew lists, surge ${settings.surge.enabled ? `on (${settings.surge.organizations.length} orgs, tickets ${settings.surge.createIssue ? settings.surge.projectKey : 'off'})` : 'off'}, portal ${settings.portalEnabled ? 'on' : 'off'}, alerts ${alerts.enabled ? `on (${alerts.organizations.length} orgs, tickets ${alerts.createIssue ? alerts.projectKey : 'off'})` : 'off'}`);
   return settings;
 });
 
