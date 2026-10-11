@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.11.1 (2026-10-11)
+
+- The Internal tab reads the client fields each time it opens, so a change in settings shows without reloading the page.
+- Settings: the client field list has a search box, with ticked fields at the top.
+- Logs record the flow counts and how many client fields are set.
+
 ## 1.11.0 (2026-10-10)
 
 - **Internal analysis:** a new Internal tab analyses your own projects instead of customer organisations: pick projects and, optionally, clients. The client is read from the client fields a Jira admin chooses in settings (for example SD Client in SD and Client elsewhere). Leave projects empty to follow a client across every project. Recurring issues, AI summary and categories, trends, time of day and full analysis all work the same. Internal reports break down by Project (several projects) and Client (several or no clients chosen), with drill-down.
