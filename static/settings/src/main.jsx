@@ -8,9 +8,10 @@ import '@retailinmotion/ui/css';
 import { enableTheme } from '@retailinmotion/ui/theme';
 import { ActionBar, AppHeader, Button, Card, Field, Footer, Loading, Notice, Tabs } from '@retailinmotion/ui/react';
 import { version } from '../../../package.json';
-import { MAX_CLIENT_FIELDS, ALERT_LIMITS, DEFAULT_ALERTS, DEFAULT_PLACEHOLDERS, DEFAULT_SYNONYMS, MAX_BREAKDOWNS, MAX_PLACEHOLDERS, MAX_WATCHED, MIN_PATTERN, SYNONYM_LIMITS } from '../../../src/settings.js';
+import { DEFAULT_INTERNAL_SYNONYMS, DEFAULT_SETTINGS, MAX_CLIENT_FIELDS, ALERT_LIMITS, DEFAULT_ALERTS, DEFAULT_PLACEHOLDERS, DEFAULT_SYNONYMS, MAX_BREAKDOWNS, MAX_PLACEHOLDERS, MAX_WATCHED, MIN_PATTERN, SYNONYM_LIMITS } from '../../../src/settings.js';
 import BackupRestore from './BackupRestore.jsx';
 import BreakdownFields from './BreakdownFields.jsx';
+import PatternSettings from './PatternSettings.jsx';
 import CrewNumbers from './CrewNumbers.jsx';
 import SurgeSettings from './SurgeSettings.jsx';
 import PdfLogos from './PdfLogos.jsx';
@@ -19,8 +20,6 @@ import './styles.css';
 enableTheme(view);
 
 const PRODUCT = 'Customer Insights';
-// Saved lists show as "first = the rest"; text being edited is kept as typed.
-const synonymText = (value) => (Array.isArray(value) ? value.map((list) => `${list[0]} = ${list.slice(1).join(', ')}`).join('\n') : value);
 
 function App() {
   const [state, setState] = useState({ loading: true });
@@ -71,12 +70,14 @@ function App() {
     {error && <Notice kind="error" title="Settings weren’t saved.">{error}</Notice>}
 
     {draft && <>
-      <div className="cs-tabs"><Tabs items={[{ id: 'customers', label: 'Customers' }, { id: 'internal', label: 'Internal' }, { id: 'general', label: 'General' }]} active={tab} onChange={setTab} /></div>
+      <div className="cs-tabs"><Tabs items={[{ id: 'customers', label: 'Customers' }, { id: 'internal', label: 'Internal' }, { id: 'general', label: 'Backup' }]} active={tab} onChange={setTab} /></div>
 
       {tab === 'customers' && <>
       <BreakdownFields id="cs-bd" title="Breakdown fields" showPortal fields={state.fields}
         description={`Customer reports show tickets and each issue split by these fields, for example base or device type. Up to ${MAX_BREAKDOWNS}.`}
         list={draft.breakdowns} onChange={(breakdowns) => { setSaved(false); setDraft((d) => ({ ...d, breakdowns })); }} />
+
+      <PatternSettings id="cs-cust" value={draft} onChange={(change) => { setSaved(false); setDraft((d) => ({ ...d, ...change })); }} />
 
       <CrewNumbers headcounts={draft.headcounts || []} organizations={state.organizations || []} breakdowns={state.settings.breakdowns} portalEnabled={draft.portalEnabled === true}
         onChange={(headcounts) => { setSaved(false); setDraft((d) => ({ ...d, headcounts })); }} />
@@ -185,32 +186,8 @@ function App() {
         description={`Internal reports show tickets and each issue split by these fields, for example team, component or category. Project and Client are added automatically. Up to ${MAX_BREAKDOWNS}.`}
         list={draft.internalBreakdowns || []} onChange={(internalBreakdowns) => { setSaved(false); setDraft((d) => ({ ...d, internalBreakdowns })); }} />
 
-      </>}
-
-      {tab === 'general' && <>
-      <Card title="Patterns" description="How tickets are grouped into recurring issues.">
-        <Field label="Minimum tickets per pattern" htmlFor="cs-min-pattern"
-          help={`Between ${MIN_PATTERN.min} and ${MIN_PATTERN.max}. Higher numbers show fewer, more established issues. For large customers this counts tickets in the analysed sample.`}>
-          <input id="cs-min-pattern" className="nq-input cs-number" type="number" min={MIN_PATTERN.min} max={MIN_PATTERN.max} step={1}
-            value={draft.minPatternSize ?? MIN_PATTERN.default}
-            onChange={(e) => { setSaved(false); setDraft((d) => ({ ...d, minPatternSize: Number(e.target.value) })); }} />
-        </Field>
-        <Field label="Words that mean the same" htmlFor="cs-synonyms"
-          help={`One list per line, for example “pinpad = bluepad, pin pad, card reader”. Tickets using any of them group together under the first word. Up to ${SYNONYM_LIMITS.groups} lines; capital letters, hyphens and plurals don’t matter.`}>
-          <textarea id="cs-synonyms" className="nq-textarea" rows={5}
-            value={synonymText(draft.synonyms ?? DEFAULT_SYNONYMS)}
-            onChange={(e) => { setSaved(false); setDraft((d) => ({ ...d, synonyms: e.target.value })); }} />
-        </Field>
-      </Card>
-
-      <Card title="Data quality" description="Breakdown values that mean nobody filled the field in. Reports count them, with tickets that have no value, so you can track the clean-up.">
-        <Field label="Placeholder values" htmlFor="cs-placeholders"
-          help={`One per line or separated by commas, up to ${MAX_PLACEHOLDERS}. Matching ignores capital letters and extra spaces.`}>
-          <textarea id="cs-placeholders" className="nq-textarea" rows={4}
-            value={Array.isArray(draft.placeholders) ? draft.placeholders.join('\n') : (draft.placeholders ?? DEFAULT_PLACEHOLDERS.join('\n'))}
-            onChange={(e) => { setSaved(false); setDraft((d) => ({ ...d, placeholders: e.target.value })); }} />
-        </Field>
-      </Card>
+      <PatternSettings id="cs-int" value={{ ...DEFAULT_SETTINGS.internalPatterns, ...draft.internalPatterns }} defaultSynonyms={DEFAULT_INTERNAL_SYNONYMS}
+        onChange={(change) => { setSaved(false); setDraft((d) => ({ ...d, internalPatterns: { ...DEFAULT_SETTINGS.internalPatterns, ...d.internalPatterns, ...change } })); }} />
 
       </>}
 
