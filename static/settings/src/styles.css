@@ -36,3 +36,6 @@
 .cs-chip__add { width: auto; min-width: 180px; }
 
 .cs-field-search { margin-bottom: var(--nq-space-075, 6px); }
+
+.cs-tabs { margin-bottom: var(--nq-space-050); }
+.cs-row--noportal { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto; }

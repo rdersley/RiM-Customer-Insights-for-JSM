@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.12.0 (2026-10-11)
+
+- **Settings in tabs:** Customers (breakdown fields, crew numbers, spike alerts, surge detection, portal, PDF logos), Internal (client fields and breakdown fields) and General (patterns, data quality, backup & restore).
+- **Internal breakdown fields:** internal reports have their own breakdown fields (for example team, component or category), separate from customer reports. Project and Client are still added automatically. Until some are chosen, internal reports show only Project and Client.
+
 ## 1.11.1 (2026-10-11)
 
 - The Internal tab reads the client fields each time it opens, so a change in settings shows without reloading the page.
