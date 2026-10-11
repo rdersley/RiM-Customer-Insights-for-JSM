@@ -1,9 +1,10 @@
 // Workload planning cards: where the effort goes (from the report), and flow,
 // backlog and forecast (from the analyzeFlow resolver).
 import React from 'react';
-import { Card, EmptyState, Kpi, Loading, Notice } from '@retailinmotion/ui/react';
+import { Button, Card, EmptyState, Kpi, Loading, Lozenge, Notice } from '@retailinmotion/ui/react';
 import { duration } from '../../../src/trend.js';
 import { busiestHours, effortRows } from '../../../src/flow.js';
+import { slaHotspots } from '../../../src/sla.js';
 
 const n = (value) => Number(value || 0).toLocaleString();
 const hoursText = (h) => (h >= 100 ? `${n(Math.round(h))} h` : `${Math.round(h * 10) / 10} h`);
@@ -90,5 +91,91 @@ export function FlowCard({ flow, loading, error, timeOfDay }) {
         {peaks.length > 0 && <p className="nq-muted">Busiest hours next week ({timeOfDay.timeZone}): {peaks.map((p) => `${p.label} ~${p.expected}`).join(' · ')} tickets an hour.</p>}
       </div> : <EmptyState compact title="Not enough history for a forecast yet." />}
     </div>
+  </Card>;
+}
+
+const pct = (value) => (value === null || value === undefined ? '–' : `${value}%`);
+
+/** SLAs (settings → Internal → SLAs): met against breached, and where breaches cluster. */
+export function SlaCard({ report, groups, nameOf }) {
+  const [slaId, setSlaId] = React.useState(report.sla?.[0]?.id || '');
+  if (!report.sla?.length) return null;
+  const current = report.sla.find((s) => s.id === slaId) || report.sla[0];
+  const hot = slaHotspots(report, groups, current.id);
+  const approx = current.estimated ? '≈' : '';
+  return <Card title="SLAs" description="Tickets that met or breached their SLA in the period. Rates for issues and breakdown values come from the analysed tickets."
+    actions={report.sla.length > 1 && <select className="nq-select ci-crew__sort" aria-label="SLA" value={current.id} onChange={(e) => setSlaId(e.target.value)}>
+      {report.sla.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+    </select>}>
+    <div className="nq-kpis">
+      {report.sla.map((s) => <Kpi key={s.id} icon="◷" kind={s.breachedShare >= 20 ? 'warning' : 'success'} label={s.name}
+        value={pct(s.breachedShare === null ? null : 100 - s.breachedShare)} hint={`met · ${s.estimated ? '≈' : ''}${n(s.breached)} breached`} />)}
+    </div>
+    <div className="nq-grid ci-split">
+      <div>
+        <h3 className="ci-subhead">Recurring issues that breach most ({current.name})</h3>
+        {hot.issues.length
+          ? <ol className="ci-values">{hot.issues.map((r) => <li key={r.index}>
+            <span className="ci-values__name" title={nameOf(groups[r.index], r.index)}>{nameOf(groups[r.index], r.index)}</span>
+            <span className="nq-muted">{r.breached} of {r.met + r.breached}</span>
+            <span className="ci-values__count">{pct(r.share)}</span>
+            <span />
+          </li>)}</ol>
+          : <p className="nq-muted">No recurring issue has breached this SLA more than once or twice.</p>}
+      </div>
+      <div>
+        {hot.breakdowns.length
+          ? hot.breakdowns.map((b) => <div key={b.label}>
+            <h3 className="ci-subhead">Highest breach rate by {b.label}</h3>
+            <ol className="ci-values">{b.values.map((v) => <li key={v.value}>
+              <span className="ci-values__name" title={v.value}>{v.value}</span>
+              <span className="nq-muted">{v.breached} of {v.met + v.breached}</span>
+              <span className="ci-values__count">{pct(v.share)}</span>
+              <span />
+            </li>)}</ol>
+          </div>)
+          : <p className="nq-muted">Add breakdown fields (such as team) to see where breaches cluster.</p>}
+      </div>
+    </div>
+    {approx && <p className="nq-muted">Counts marked ≈ are estimated from the sample.</p>}
+  </Card>;
+}
+
+/**
+ * Knowledge gaps: searches the knowledge base for the top recurring issues on
+ * request; issues with no matching article are candidates for one.
+ */
+export function KnowledgeCard({ groups, nameOf, invoke }) {
+  const [state, setState] = React.useState({ loading: false, results: null, error: '' });
+  const topics = (groups || []).slice(0, 15).map((g, index) => ({ key: g.id, title: nameOf(g, index), index }));
+  if (!topics.length) return null;
+  async function check() {
+    setState({ loading: true, results: null, error: '' });
+    try {
+      const { results } = await invoke('knowledgeGaps', { topics: topics.map(({ key, title }) => ({ key, title })) });
+      setState({ loading: false, results, error: '' });
+    } catch (e) { setState({ loading: false, results: null, error: e.message || 'The knowledge base couldn’t be searched.' }); }
+  }
+  const byKey = new Map((state.results || []).map((r) => [r.key, r]));
+  const gaps = topics.filter((t) => byKey.get(t.key) && !byKey.get(t.key).articles.length && !byKey.get(t.key).error);
+  return <Card title="Knowledge gaps" description="Recurring issues with no knowledge base article are candidates for one: a good article lets customers and agents fix them faster."
+    actions={<Button small onClick={check} disabled={state.loading}>{state.loading ? 'Searching…' : state.results ? 'Search again' : 'Check knowledge base'}</Button>}>
+    {state.error && <Notice kind="error">{state.error}</Notice>}
+    {state.loading && <Loading inline text={`Searching the knowledge base for ${topics.length} issues…`} />}
+    {!state.results && !state.loading && !state.error && <p className="nq-muted">Searches the knowledge base for each of the top {topics.length} recurring issues.</p>}
+    {state.results && <>
+      <p className="nq-muted">{gaps.length ? `${gaps.length} of ${topics.length} issues have no matching article.` : 'Every issue has at least one possible article. Check they answer the issue.'}</p>
+      <ul className="ci-gaps">{topics.map((t) => {
+        const r = byKey.get(t.key);
+        if (!r) return null;
+        return <li key={t.key}>
+          <span className="ci-gaps__name">{t.title} <span className="nq-muted">({n(groups[t.index].count)} tickets)</span></span>
+          {r.error ? <span className="nq-muted">Not searched</span>
+            : r.articles.length ? <span className="ci-gaps__articles">{r.articles.map((a, i) => <React.Fragment key={a.title + i}>{i > 0 && ' · '}{a.url ? <a href={a.url} target="_blank" rel="noreferrer">{a.title}</a> : a.title}</React.Fragment>)}</span>
+            : <Lozenge kind="warning">No article</Lozenge>}
+        </li>;
+      })}</ul>
+      <p className="nq-muted">Matches come from the knowledge base search for each issue’s main words, so check a match really covers the issue.</p>
+    </>}
   </Card>;
 }

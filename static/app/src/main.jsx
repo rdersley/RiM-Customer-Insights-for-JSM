@@ -9,7 +9,7 @@ import { localIso, matchPreset, presetRange, PRESETS } from '../../../src/dates.
 import { analyseEveryTicket, Cancelled, FULL_LIMIT } from './fullAnalysis.js';
 import { exportPdf } from './exportPdf.js';
 import CrewRates from './CrewRates.jsx';
-import { EffortCard, FlowCard } from './WorkloadCards.jsx';
+import { EffortCard, FlowCard, KnowledgeCard, SlaCard } from './WorkloadCards.jsx';
 import { crewRates } from '../../../src/headcount.js';
 import { applyMerges, categoriesOf, median, patternTrend, topShares } from '../../../src/analysis.js';
 import { jqlClause, jqlEmptyClause } from '../../../src/settings.js';
@@ -913,6 +913,10 @@ function App() {
       </Card>
 
       <EffortCard report={report} groups={groups} nameOf={patternName} />
+
+      <SlaCard report={report} groups={groups} nameOf={patternName} />
+
+      <KnowledgeCard key={report.baseJql} groups={groups} nameOf={patternName} invoke={invoke} />
 
       {!reportOrgId && report.organizations?.length > 1 && <p className="nq-muted">Portal reports are published for one organisation at a time. Choose a single organisation to prepare one.</p>}
 

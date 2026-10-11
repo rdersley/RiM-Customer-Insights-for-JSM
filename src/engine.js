@@ -200,7 +200,9 @@ export function parseQuery(payload, filter = null, { clientFields = [] } = {}) {
  * Exact totals, an even sample of up to 900 tickets per period, and the
  * report. `budgetMs` stops new fetches in time for the caller's limit.
  */
-export async function runAnalysis(query, { breakdowns = [], minPatternSize, placeholders, synonyms, mode = 'user', budgetMs = 15000 } = {}) {
+export async function runAnalysis(query, { breakdowns = [], minPatternSize, placeholders, synonyms, slaFields = [], mode = 'user', budgetMs = 15000 } = {}) {
+  // SLA fields are fetched with the tickets but aren't breakdowns.
+  const fetched = [...breakdowns, ...slaFields.map((f) => ({ id: f.id, kind: null }))];
   const { startDate, endDate, previousStart, endExclusive, between } = query;
   const startedAt = Date.now();
   const deadline = startedAt + budgetMs;
@@ -220,7 +222,7 @@ export async function runAnalysis(query, { breakdowns = [], minPatternSize, plac
       let token;
       do {
         if (Date.now() > deadline) { cutShort = true; break; }
-        const page = await searchPage(between(from, toExclusive), 100, token, breakdowns, mode);
+        const page = await searchPage(between(from, toExclusive), 100, token, fetched, mode);
         issues.push(...page.issues);
         token = page.nextPageToken;
       } while (token && issues.length < PERIOD_SAMPLE);
@@ -229,7 +231,7 @@ export async function runAnalysis(query, { breakdowns = [], minPatternSize, plac
     const perSlice = Math.min(100, Math.ceil(PERIOD_SAMPLE / SAMPLE_SLICES));
     const pages = await pool(dateSlices(from, toExclusive, SAMPLE_SLICES).map(([a, b]) => () => {
       if (Date.now() > deadline) { cutShort = true; return { issues: [] }; }
-      return searchPage(between(a, b), perSlice, undefined, breakdowns, mode);
+      return searchPage(between(a, b), perSlice, undefined, fetched, mode);
     }), CONCURRENCY);
     return pages.flatMap((page) => page.issues);
   }
@@ -246,7 +248,7 @@ export async function runAnalysis(query, { breakdowns = [], minPatternSize, plac
     timeSeries = buckets.map((b, i) => ({ date: b.date, count: counts[i] }));
   }
   const issues = [...currentIssues, ...previousIssues];
-  const report = buildReport(issues, startDate, endDate, { current: currentTotal, previous: previousTotal, timeSeries }, { breakdowns, minPatternSize, placeholders, synonyms, timeZone: query.timeZone });
+  const report = buildReport(issues, startDate, endDate, { current: currentTotal, previous: previousTotal, timeSeries }, { breakdowns, minPatternSize, placeholders, synonyms, slaFields, timeZone: query.timeZone });
   console.log(`analysis (${mode}): ${currentTotal}+${previousTotal} tickets, ${issues.length} fetched in ${Date.now() - startedAt}ms`);
   return {
     ...report,

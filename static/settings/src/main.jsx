@@ -12,6 +12,7 @@ import { DEFAULT_INTERNAL_SYNONYMS, DEFAULT_SETTINGS, MAX_CLIENT_FIELDS, ALERT_L
 import BackupRestore from './BackupRestore.jsx';
 import BreakdownFields from './BreakdownFields.jsx';
 import PatternSettings from './PatternSettings.jsx';
+import SlaSettings from './SlaSettings.jsx';
 import CrewNumbers from './CrewNumbers.jsx';
 import SurgeSettings from './SurgeSettings.jsx';
 import PdfLogos from './PdfLogos.jsx';
@@ -185,6 +186,9 @@ function App() {
       <BreakdownFields id="cs-ibd" title="Breakdown fields" fields={state.fields}
         description={`Internal reports show tickets and each issue split by these fields, for example team, component or category. Project and Client are added automatically. Up to ${MAX_BREAKDOWNS}.`}
         list={draft.internalBreakdowns || []} onChange={(internalBreakdowns) => { setSaved(false); setDraft((d) => ({ ...d, internalBreakdowns })); }} />
+
+      <SlaSettings value={draft.slaFields || []} choices={state.slaChoices || []}
+        onChange={(slaFields) => { setSaved(false); setDraft((d) => ({ ...d, slaFields })); }} />
 
       <PatternSettings id="cs-int" value={{ ...DEFAULT_SETTINGS.internalPatterns, ...draft.internalPatterns }} defaultSynonyms={DEFAULT_INTERNAL_SYNONYMS}
         onChange={(change) => { setSaved(false); setDraft((d) => ({ ...d, internalPatterns: { ...DEFAULT_SETTINGS.internalPatterns, ...d.internalPatterns, ...change } })); }} />

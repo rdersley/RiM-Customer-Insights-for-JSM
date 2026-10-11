@@ -15,6 +15,8 @@ import { isLive, liveConfigFrom } from './live.js';
 import { queueAlertCheck, queueRefresh } from './liveJobs.js';
 import { autoInternalBreakdowns, organisationBreakdown, patternSettingsFor, sanitizeSettings, selectableFields } from './settings.js';
 import { problemFields, problemRequest, relatesLinkType } from './problem.js';
+import { slaFieldChoices, slaState } from './sla.js';
+import { searchWords } from './surge.js';
 
 // This package is "type": "module"; Forge's bundler then hands CommonJS packages
 // over as their exports object, so the class sits on `.default`.
@@ -115,7 +117,8 @@ async function breakdownsFor(payload) {
 define('fetchTickets', async ({ payload, context }) => {
   if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
   const breakdowns = await breakdownsFor(payload);
-  const query = parseQuery(payload, filterFor(payload?.filter, breakdowns), { clientFields: (await loadSettings()).clientFields || [] });
+  const { clientFields, slaFields = [] } = await loadSettings();
+  const query = parseQuery(payload, filterFor(payload?.filter, breakdowns), { clientFields: clientFields || [] });
   const { from, toExclusive } = payload;
   if (!ISO_DATE.test(from || '') || !ISO_DATE.test(toExclusive || '') || from < query.previousStart || toExclusive > query.endExclusive || from >= toExclusive) {
     throw new Error('Invalid ticket range.');
@@ -124,7 +127,7 @@ define('fetchTickets', async ({ payload, context }) => {
   const tickets = [];
   let token = typeof payload.nextPageToken === 'string' ? payload.nextPageToken : undefined;
   for (let page = 0; page < FULL_PAGES_PER_CALL; page += 1) {
-    const result = await searchPage(query.between(from, toExclusive), 100, token, breakdowns);
+    const result = await searchPage(query.between(from, toExclusive), 100, token, [...breakdowns, ...slaFields.map((f) => ({ id: f.id, kind: null }))]);
     for (const issue of result.issues) {
       tickets.push({
         key: issue.key,
@@ -137,6 +140,8 @@ define('fetchTickets', async ({ payload, context }) => {
           resolutiondate: issue.fields?.resolutiondate || null,
           timespent: issue.fields?.timespent ?? null,
           status: { name: issue.fields?.status?.name || 'Unknown' },
+          // SLAs reduced to 'met' / 'breached' (or null) to keep the payload small.
+          ...Object.fromEntries(slaFields.map((f) => [f.id, slaState(issue.fields?.[f.id])])),
         },
       });
     }
@@ -154,7 +159,7 @@ define('analyze', async ({ payload, context }) => {
   const breakdowns = await breakdownsFor(payload);
   const query = parseQuery(payload, filterFor(payload?.filter, breakdowns), { clientFields: clientFields || [] });
   // Resolvers are killed at 25s; runAnalysis stops starting new fetches after the budget.
-  return runAnalysis(query, { breakdowns, minPatternSize, placeholders, synonyms, mode: 'user', budgetMs: FETCH_BUDGET_MS });
+  return runAnalysis(query, { breakdowns, minPatternSize, placeholders, synonyms, slaFields: settings.slaFields || [], mode: 'user', budgetMs: FETCH_BUDGET_MS });
 });
 
 // Flow and workload planning (src/flow.js), separate from analyze so it gets its
@@ -189,6 +194,42 @@ define('analyzeFlow', async ({ payload, context }) => {
     // Forecast from the week after this one (this week is still under way).
     forecast: complete ? forecast(weekly, undefined, nextMonday) : null,
   };
+});
+
+// Knowledge gaps: for the top recurring issues, search the JSM knowledge base
+// (as the agent) and return any matching articles. An issue with none is a gap.
+const MAX_GAP_TOPICS = 15;
+define('knowledgeGaps', async ({ payload, context }) => {
+  if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
+  const topics = (Array.isArray(payload?.topics) ? payload.topics : []).slice(0, MAX_GAP_TOPICS)
+    .map((t) => ({ key: String(t?.key ?? '').slice(0, 200), title: String(t?.title ?? '').slice(0, 120) }))
+    .filter((t) => t.key && t.title);
+  let site = '';
+  try { site = String((await readJson(await asUser().requestJira(route`/rest/api/3/serverInfo`, { headers: { Accept: 'application/json' } }), 'Server info')).baseUrl || '').replace(/\/$/, ''); } catch { /* links left out */ }
+  let failure = null;
+  const results = await pool(topics.map((t) => async () => {
+    const words = searchWords(t.title);
+    if (!words || failure) return { key: t.key, query: words, articles: [] };
+    const response = await asUser().requestJira(route`/rest/servicedeskapi/knowledgebase/article?query=${words}&highlight=false&limit=3`, {
+      headers: { Accept: 'application/json', 'X-ExperimentalApi': 'opt-in' },
+    });
+    if (!response.ok) {
+      if ([401, 403, 404].includes(response.status)) failure = `The knowledge base couldn’t be searched (${response.status}). Check the service project has a linked knowledge base and you can view it.`;
+      return { key: t.key, query: words, articles: [], error: true };
+    }
+    const data = await response.json();
+    return {
+      key: t.key,
+      query: words,
+      articles: (data.values || []).slice(0, 3).map((a) => ({
+        title: String(a.title || '').slice(0, 200),
+        url: a.source?.pageId && a.source?.spaceKey && site ? `${site}/wiki/spaces/${encodeURIComponent(a.source.spaceKey)}/pages/${encodeURIComponent(a.source.pageId)}` : '',
+      })).filter((a) => a.title),
+    };
+  }), 4);
+  console.log(`knowledgeGaps: ${topics.length} issues, ${results.filter((r) => !r.articles.length && !r.error).length} without an article${failure ? ', search failed' : ''}`);
+  if (failure && results.every((r) => r.error || !r.articles.length)) throw new Error(failure);
+  return { results };
 });
 
 // Internal analysis pickers: projects this user can see, and client values.
@@ -354,8 +395,14 @@ async function isJiraAdmin() {
 }
 
 async function siteFields() {
+  return (await siteFieldLists()).selectable;
+}
+
+/** Fields an admin can break down by, and the site's JSM SLA fields. */
+async function siteFieldLists() {
   const response = await asUser().requestJira(route`/rest/api/3/field`, { headers: { Accept: 'application/json' } });
-  return selectableFields(await readJson(response, 'Field list'));
+  const all = await readJson(response, 'Field list');
+  return { selectable: selectableFields(all), slaChoices: slaFieldChoices(all) };
 }
 
 /** The id of the alert ticket's issue type, checked against the project. */
@@ -420,11 +467,12 @@ define('createProblem', async ({ payload, context }) => {
 define('getSettings', async ({ context }) => {
   if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
   if (!(await isJiraAdmin())) return { isAdmin: false };
-  const [settings, fields, organizations] = await Promise.all([loadSettings(), siteFields(), listOrganizations()]);
+  const [settings, { selectable: fields, slaChoices }, organizations] = await Promise.all([loadSettings(), siteFieldLists(), listOrganizations()]);
   return {
     isAdmin: true,
     settings,
     fields,
+    slaChoices,
     organizations,
   };
 });
@@ -432,13 +480,13 @@ define('getSettings', async ({ context }) => {
 define('saveSettings', async ({ payload, context }) => {
   if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
   if (!(await isJiraAdmin())) throw new Error('Only Jira admins can change Customer Insights settings.');
-  const [fields, organizations] = await Promise.all([siteFields(), listOrganizations()]);
-  const settings = sanitizeSettings(payload?.settings, fields, organizations);
+  const [{ selectable: fields, slaChoices }, organizations] = await Promise.all([siteFieldLists(), listOrganizations()]);
+  const settings = sanitizeSettings(payload?.settings, fields, organizations, { slaChoices });
   if (settings.alerts.createIssue) settings.alerts.issueTypeId = await alertIssueType(settings.alerts);
   if (settings.surge.enabled && settings.surge.createIssue) settings.surge.issueTypeId = await alertIssueType(settings.surge);
   await saveSettings(settings);
   const { alerts } = settings;
-  console.log(`saveSettings: ${settings.breakdowns.length} breakdowns, ${settings.internalBreakdowns.length} internal breakdowns, ${settings.clientFields.length} client fields, ${settings.headcounts.length} crew lists, surge ${settings.surge.enabled ? `on (${settings.surge.organizations.length} orgs, tickets ${settings.surge.createIssue ? settings.surge.projectKey : 'off'})` : 'off'}, portal ${settings.portalEnabled ? 'on' : 'off'}, alerts ${alerts.enabled ? `on (${alerts.organizations.length} orgs, tickets ${alerts.createIssue ? alerts.projectKey : 'off'})` : 'off'}`);
+  console.log(`saveSettings: ${settings.breakdowns.length} breakdowns, ${settings.internalBreakdowns.length} internal breakdowns, ${settings.slaFields.length} SLAs, ${settings.clientFields.length} client fields, ${settings.headcounts.length} crew lists, surge ${settings.surge.enabled ? `on (${settings.surge.organizations.length} orgs, tickets ${settings.surge.createIssue ? settings.surge.projectKey : 'off'})` : 'off'}, portal ${settings.portalEnabled ? 'on' : 'off'}, alerts ${alerts.enabled ? `on (${alerts.organizations.length} orgs, tickets ${alerts.createIssue ? alerts.projectKey : 'off'})` : 'off'}`);
   return settings;
 });
 
