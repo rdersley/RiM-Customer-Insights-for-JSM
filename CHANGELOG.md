@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.15.0 (2026-10-11)
+
+- **Settings per project:** on the Internal tab of settings, add project settings (for example IT Help, or Service Desk for SD and HW) with their own client fields, breakdown fields, SLAs, patterns, words that mean the same and placeholders. A new set starts as a copy of the default. An internal analysis uses a project's settings when every chosen project shares them; anything else uses the default internal settings, and the report says which were used.
+- Clients are matched in every client field across all settings, so "SD Client" and "Client" both work whichever settings apply.
+
 ## 1.14.0 (2026-10-11)
 
 - **SLAs:** choose the service project SLA fields that matter in settings (Internal → SLAs; for example Time to resolution, Time to first response). Reports on both tabs show the share met and breached in the period, the recurring issues that breach most, and the breakdown values (such as teams) with the highest breach rate. Works with full analysis too.

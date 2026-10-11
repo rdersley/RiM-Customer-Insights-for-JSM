@@ -12,7 +12,7 @@ import { DEFAULT_INTERNAL_SYNONYMS, DEFAULT_SETTINGS, MAX_CLIENT_FIELDS, ALERT_L
 import BackupRestore from './BackupRestore.jsx';
 import BreakdownFields from './BreakdownFields.jsx';
 import PatternSettings from './PatternSettings.jsx';
-import SlaSettings from './SlaSettings.jsx';
+import InternalSettings from './InternalSettings.jsx';
 import CrewNumbers from './CrewNumbers.jsx';
 import SurgeSettings from './SurgeSettings.jsx';
 import PdfLogos from './PdfLogos.jsx';
@@ -41,7 +41,6 @@ function App() {
   const dirty = draft && state.settings && JSON.stringify(draft) !== JSON.stringify(state.settings);
   const [orgFilter, setOrgFilter] = useState('');
   const [checkNote, setCheckNote] = useState('');
-  const [clientSearch, setClientSearch] = useState('');
   const [tab, setTab] = useState('customers');
   const alerts = { ...DEFAULT_ALERTS, ...draft?.alerts };
   const setAlerts = (change) => { setSaved(false); setDraft((d) => ({ ...d, alerts: { ...DEFAULT_ALERTS, ...d.alerts, ...change } })); };
@@ -160,40 +159,8 @@ function App() {
 
       </>}
 
-      {tab === 'internal' && <>
-      <Card title="Client fields" description="The Internal tab analyses your own projects instead of customer organisations. Choose the fields that hold the client, so an analysis can be narrowed to a client and broken down by client. Different projects can use different fields (for example SD Client in SD and Client elsewhere).">
-        <Field label={`Client fields (up to ${MAX_CLIENT_FIELDS})`} htmlFor="cs-client-fields"
-          help="Select lists, checkboxes, cascading selects and labels can be used. A ticket's client is read from whichever of these it has.">
-          <input className="nq-input cs-field-search" placeholder="Search fields" aria-label="Search client fields" value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} />
-          <div className="cs-orgs" id="cs-client-fields">{(() => {
-            const chosen = (draft.clientFields || []).map((x) => x.id ?? x);
-            const term = clientSearch.trim().toLowerCase();
-            const usable = state.fields.filter((f) => /^customfield_/.test(f.id) && ['option', 'options', 'cascading', 'strings'].includes(f.kind));
-            // Ticked fields first, then matches for the search.
-            return [...usable.filter((f) => chosen.includes(f.id)), ...usable.filter((f) => !chosen.includes(f.id) && (!term || f.name.toLowerCase().includes(term)))];
-          })().map((f) => {
-            const chosen = (draft.clientFields || []).map((x) => x.id ?? x);
-            const on = chosen.includes(f.id);
-            return <label className="cs-check" key={f.id}>
-              <input type="checkbox" className="nq-check" checked={on} disabled={!on && chosen.length >= MAX_CLIENT_FIELDS}
-                onChange={(e) => { setSaved(false); setDraft((d) => ({ ...d, clientFields: e.target.checked ? [...chosen, f.id] : chosen.filter((id) => id !== f.id) })); }} />
-              <span>{f.name}</span>
-            </label>;
-          })}</div>
-        </Field>
-      </Card>
-
-      <BreakdownFields id="cs-ibd" title="Breakdown fields" fields={state.fields}
-        description={`Internal reports show tickets and each issue split by these fields, for example team, component or category. Project and Client are added automatically. Up to ${MAX_BREAKDOWNS}.`}
-        list={draft.internalBreakdowns || []} onChange={(internalBreakdowns) => { setSaved(false); setDraft((d) => ({ ...d, internalBreakdowns })); }} />
-
-      <SlaSettings value={draft.slaFields || []} choices={state.slaChoices || []}
-        onChange={(slaFields) => { setSaved(false); setDraft((d) => ({ ...d, slaFields })); }} />
-
-      <PatternSettings id="cs-int" value={{ ...DEFAULT_SETTINGS.internalPatterns, ...draft.internalPatterns }} defaultSynonyms={DEFAULT_INTERNAL_SYNONYMS}
-        onChange={(change) => { setSaved(false); setDraft((d) => ({ ...d, internalPatterns: { ...DEFAULT_SETTINGS.internalPatterns, ...d.internalPatterns, ...change } })); }} />
-
-      </>}
+      {tab === 'internal' && <InternalSettings draft={draft} fields={state.fields} slaChoices={state.slaChoices || []} invoke={invoke}
+        update={(fn) => { setSaved(false); setDraft(fn); }} />}
 
       <ActionBar state={saving ? 'Saving…' : dirty ? 'Unsaved changes' : saved ? 'Saved' : ''}>
         <Button appearance="subtle" disabled={!dirty || saving} onClick={() => { setDraft(state.settings); setSaved(false); }}>Discard</Button>
