@@ -185,3 +185,8 @@
 .ci-gaps li:last-child { border-bottom: 0; }
 .ci-gaps__name { color: var(--nq-text); min-width: 0; }
 .ci-gaps__articles { text-align: right; }
+
+/* Team performance */
+.ci-agents .ci-num { text-align: right; white-space: nowrap; }
+.ci-agents th .ci-link { font-weight: 600; color: var(--nq-text-subtle); }
+.ci-agents th .ci-link.is-sorted { color: var(--nq-text); text-decoration: underline; }

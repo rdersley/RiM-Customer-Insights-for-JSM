@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.16.0 (2026-10-12)
+
+- **Team performance:** reports (both tabs) get a Team performance card for tickets resolved in the period and open now: resolved, typical time to resolve, SLA met (the SLA fields that apply), customer satisfaction (average rating and how many rated), time logged, open tickets and the oldest, and the work mix (top issue types and the share that was urgent). **Per-agent figures are shown to Jira admins only**; everyone else sees team totals. Nothing is stored: figures are worked out when the report runs. Large periods are sampled evenly.
+
 ## 1.15.0 (2026-10-11)
 
 - **Settings per project:** on the Internal tab of settings, add project settings (for example IT Help, or Service Desk for SD and HW) with their own client fields, breakdown fields, SLAs, patterns, words that mean the same and placeholders. A new set starts as a copy of the default. An internal analysis uses a project's settings when every chosen project shares them; anything else uses the default internal settings, and the report says which were used.
