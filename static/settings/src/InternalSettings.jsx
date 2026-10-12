@@ -112,5 +112,14 @@ export default function InternalSettings({ draft, update, fields, slaChoices, in
 
     <PatternSettings id={`cs-int-${selected}`} value={current.patterns} defaultSynonyms={DEFAULT_INTERNAL_SYNONYMS}
       onChange={(change) => set('patterns', { ...current.patterns, ...change })} />
+
+    <Card title="Handling time (AHT)" description="Team performance shows each agent's average handling time: how long tickets were in progress while assigned to them. This applies to every report.">
+      <Field label="Statuses that count as handling" htmlFor="cs-handling"
+        help="One per line, for example In Progress. Leave empty to count every “in progress” status except waiting ones (Waiting for customer, Pending, On hold…).">
+        <textarea id="cs-handling" className="nq-textarea" rows={3} placeholder="In Progress"
+          value={Array.isArray(draft.handlingStatuses) ? draft.handlingStatuses.join('\n') : (draft.handlingStatuses || '')}
+          onChange={(e) => update((d) => ({ ...d, handlingStatuses: e.target.value }))} />
+      </Field>
+    </Card>
   </>;
 }

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.17.0 (2026-10-12)
+
+- **AHT (average handling time)** on Team performance: how long tickets were in progress while assigned to each agent, per ticket they worked on, plus total handling hours, for each agent (Jira admins) and the team. Worked out from each resolved ticket's status and assignee history; a ticket passed between agents splits its time. By default every "in progress" status counts except waiting ones (Waiting for customer, Pending, On hold…); settings (Internal → Handling time) can list the exact statuses instead.
+
 ## 1.16.0 (2026-10-12)
 
 - **Team performance:** reports (both tabs) get a Team performance card for tickets resolved in the period and open now: resolved, typical time to resolve, SLA met (the SLA fields that apply), customer satisfaction (average rating and how many rated), time logged, open tickets and the oldest, and the work mix (top issue types and the share that was urgent). **Per-agent figures are shown to Jira admins only**; everyone else sees team totals. Nothing is stored: figures are worked out when the report runs. Large periods are sampled evenly.

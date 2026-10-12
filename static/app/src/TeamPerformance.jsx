@@ -10,6 +10,8 @@ const n = (value) => Number(value || 0).toLocaleString();
 const COLUMNS = [
   { key: 'resolved', label: 'Resolved', value: (r) => r.resolved },
   { key: 'medianHours', label: 'Typical time to resolve', value: (r) => r.medianHours ?? Infinity, asc: true },
+  { key: 'aht', label: 'AHT', value: (r) => r.ahtHours ?? Infinity, asc: true, title: 'Average handling time: time in progress per ticket worked on' },
+  { key: 'handlingHours', label: 'Handling', value: (r) => r.handlingHours ?? 0, title: 'Total time tickets were in progress with this agent' },
   { key: 'sla', label: 'SLA met', value: (r, slaId) => r.sla?.[slaId]?.metShare ?? -1 },
   { key: 'rating', label: 'Satisfaction', value: (r) => r.rating ?? -1 },
   { key: 'loggedHours', label: 'Logged', value: (r) => r.loggedHours },
@@ -40,18 +42,20 @@ export default function TeamPerformance({ data, loading, error }) {
     <div className="nq-kpis">
       <Kpi icon="✓" kind="success" label="Resolved" value={n(t.resolved)} hint={`by ${n(t.agents)} ${t.agents === 1 ? 'agent' : 'agents'}`} />
       <Kpi icon="◷" kind="info" label="Typical time to resolve" value={t.medianHours === null ? '–' : duration(t.medianHours)} hint={`${t.urgentShare}% urgent`} />
+      {data.handling && <Kpi icon="⏱" kind="info" label="AHT" value={t.ahtHours === null ? '–' : duration(t.ahtHours)} hint={`in progress per ticket · ${approx}${n(t.handlingHours)} h in all`} />}
       {sla && <Kpi icon="⚑" kind={(t.sla?.[sla.id]?.metShare ?? 100) < 80 ? 'warning' : 'success'} label={`${sla.name} met`} value={metShare(t)} />}
       {data.satisfaction && <Kpi icon="☺" kind="info" label="Satisfaction" value={t.rating === null ? '–' : `${t.rating} / 5`} hint={`${n(t.rated)} rated`} />}
       <Kpi icon="▤" label="Open now" value={n(t.open)} hint={t.oldestOpenDays !== null ? `oldest ${n(t.oldestOpenDays)} days` : undefined} />
     </div>
+    {data.handling && !data.handling.complete && <Notice>Not every ticket’s history could be read in time, so AHT covers the tickets that were. Try a shorter period.</Notice>}
     {data.cutShort && <Notice>Not every ticket could be read in time; figures cover the tickets that were. Try a shorter period.</Notice>}
     {data.agents ? <>
       <div className="nq-table-wrap">
         <table className="nq-table ci-agents">
           <thead><tr>
             <th>Agent</th>
-            {COLUMNS.filter((c) => (c.key !== 'sla' || sla) && (c.key !== 'rating' || data.satisfaction)).map((c) => <th key={c.key} className="ci-num">
-              <button type="button" className={`ci-link${sort === c.key ? ' is-sorted' : ''}`} onClick={() => setSort(c.key)} title={`Sort by ${c.label.toLowerCase()}`}>{c.key === 'sla' ? `${sla.name} met` : c.label}</button>
+            {COLUMNS.filter((c) => (c.key !== 'sla' || sla) && (c.key !== 'rating' || data.satisfaction) && (!['aht', 'handlingHours'].includes(c.key) || data.handling)).map((c) => <th key={c.key} className="ci-num">
+              <button type="button" className={`ci-link${sort === c.key ? ' is-sorted' : ''}`} onClick={() => setSort(c.key)} title={c.title || `Sort by ${c.label.toLowerCase()}`}>{c.key === 'sla' ? `${sla.name} met` : c.label}</button>
             </th>)}
             <th>Work mix</th>
           </tr></thead>
@@ -59,6 +63,8 @@ export default function TeamPerformance({ data, loading, error }) {
             <td>{r.agent.name}</td>
             <td className="ci-num">{approx}{n(r.resolved)}</td>
             <td className="ci-num">{r.medianHours === null ? '–' : duration(r.medianHours)}</td>
+            {data.handling && <td className="ci-num">{r.ahtHours === null ? '–' : duration(r.ahtHours)}{r.handled ? <small className="nq-muted"> · {n(r.handled)}</small> : null}</td>}
+            {data.handling && <td className="ci-num">{r.handlingHours ? `${approx}${n(r.handlingHours)} h` : '–'}</td>}
             {sla && <td className="ci-num">{metShare(r)}</td>}
             {data.satisfaction && <td className="ci-num">{r.rating === null ? '–' : `${r.rating} (${r.rated})`}</td>}
             <td className="ci-num">{r.loggedHours ? `${approx}${n(r.loggedHours)} h` : '–'}</td>
@@ -67,7 +73,7 @@ export default function TeamPerformance({ data, loading, error }) {
           </tr>)}</tbody>
         </table>
       </div>
-      <p className="nq-muted">Per-agent figures are shown to Jira admins only. Satisfaction shows the average rating and how many tickets were rated.</p>
+      <p className="nq-muted">Per-agent figures are shown to Jira admins only. Satisfaction shows the average rating and how many tickets were rated. AHT is the time a ticket spent in progress while assigned to the agent, per ticket they worked on (the small number); {data.handling?.statuses ? `in progress means: ${data.handling.statuses.join(', ')}` : 'waiting statuses such as “Waiting for customer” don’t count'}.</p>
     </> : <p className="nq-muted">Per-agent figures are available to Jira admins.</p>}
   </Card>;
 }

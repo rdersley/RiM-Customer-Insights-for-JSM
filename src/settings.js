@@ -45,7 +45,7 @@ export const DEFAULT_ALERTS = {
   issueTypeName: 'Task',
   issueTypeId: '',
 };
-export const DEFAULT_SETTINGS = { breakdowns: [], internalBreakdowns: [], projectProfiles: [], slaFields: [], internalPatterns: { minPatternSize: MIN_PATTERN.default, synonyms: DEFAULT_INTERNAL_SYNONYMS, placeholders: DEFAULT_PLACEHOLDERS }, clientFields: [], headcounts: [], portalEnabled: false, minPatternSize: MIN_PATTERN.default, placeholders: DEFAULT_PLACEHOLDERS, synonyms: DEFAULT_SYNONYMS, alerts: DEFAULT_ALERTS, surge: DEFAULT_SURGE };
+export const DEFAULT_SETTINGS = { breakdowns: [], internalBreakdowns: [], projectProfiles: [], handlingStatuses: [], slaFields: [], internalPatterns: { minPatternSize: MIN_PATTERN.default, synonyms: DEFAULT_INTERNAL_SYNONYMS, placeholders: DEFAULT_PLACEHOLDERS }, clientFields: [], headcounts: [], portalEnabled: false, minPatternSize: MIN_PATTERN.default, placeholders: DEFAULT_PLACEHOLDERS, synonyms: DEFAULT_SYNONYMS, alerts: DEFAULT_ALERTS, surge: DEFAULT_SURGE };
 
 const whole = (value, { min, max, default: fallback }) => {
   const n = Number(value);
@@ -242,7 +242,10 @@ export function sanitizeSettings(input, selectable, organizations = [], { slaCho
     })
     .filter(Boolean)
     .slice(0, MAX_PROJECT_PROFILES);
-  return { breakdowns, internalBreakdowns, internalPatterns, projectProfiles, slaFields: slaFieldList(input?.slaFields, slaChoices), clientFields: clientFieldList(input?.clientFields, selectable), headcounts: sanitizeHeadcounts(input?.headcounts, organizations, breakdowns), portalEnabled: input?.portalEnabled === true, minPatternSize: patternMinimum(input?.minPatternSize), placeholders: placeholderList(input?.placeholders), synonyms: synonymList(input?.synonyms), alerts: sanitizeAlerts(input?.alerts, organizations), surge: sanitizeSurge(input?.surge, organizations, breakdowns, selectable) };
+  // Statuses that count as handling time (AHT); empty means "in progress" ones that aren't waiting.
+  const handlingStatuses = [...new Set((Array.isArray(input?.handlingStatuses) ? input.handlingStatuses : String(input?.handlingStatuses ?? '').split(/[\n,]/))
+    .map((n) => clip(n, 60)).filter(Boolean))].slice(0, 30);
+  return { breakdowns, internalBreakdowns, internalPatterns, projectProfiles, handlingStatuses, slaFields: slaFieldList(input?.slaFields, slaChoices), clientFields: clientFieldList(input?.clientFields, selectable), headcounts: sanitizeHeadcounts(input?.headcounts, organizations, breakdowns), portalEnabled: input?.portalEnabled === true, minPatternSize: patternMinimum(input?.minPatternSize), placeholders: placeholderList(input?.placeholders), synonyms: synonymList(input?.synonyms), alerts: sanitizeAlerts(input?.alerts, organizations), surge: sanitizeSurge(input?.surge, organizations, breakdowns, selectable) };
 }
 
 const quote = (v) => `"${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;

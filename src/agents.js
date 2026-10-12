@@ -33,7 +33,59 @@ const agentOf = (issue) => {
 };
 
 function emptyRow(agent) {
-  return { agent, resolved: 0, hours: [], loggedSeconds: 0, ratings: [], sla: {}, types: {}, urgent: 0, open: 0, openAges: [] };
+  return { agent, resolved: 0, hours: [], loggedSeconds: 0, ratings: [], sla: {}, types: {}, urgent: 0, open: 0, openAges: [], handlingMs: 0, handled: 0 };
+}
+
+// ---- Handling time (AHT) ---------------------------------------------------------
+
+// JSM puts waiting statuses in the same "in progress" category as real work.
+const WAITING = /wait|pending|hold|paused|awaiting|blocked/i;
+
+/**
+ * Whether a status counts as handling: the admin's list of status names when
+ * set, otherwise "in progress" category statuses that aren't waiting ones.
+ * `status` is { name, category } (category key from GET /rest/api/3/status).
+ */
+export function isHandlingStatus(status, handlingStatuses = []) {
+  if (!status) return false;
+  if (handlingStatuses.length) return handlingStatuses.some((n) => n.toLowerCase() === String(status.name).toLowerCase());
+  return status.category === 'indeterminate' && !WAITING.test(String(status.name));
+}
+
+/**
+ * Milliseconds each assignee had a ticket in a handling status, from its
+ * status and assignee history (bulk changelog histories, any order). The
+ * ticket's state before its first change comes from that change's "from";
+ * with no changes, from its current status and assignee. Time runs from
+ * creation to resolution (or `now`). Returns { accountId: ms }.
+ */
+export function handlingTimes(issue, histories, statusById, handlingStatuses = [], now = Date.now()) {
+  const f = issue.fields || {};
+  const start = Date.parse(f.created);
+  const end = Number.isFinite(Date.parse(f.resolutiondate)) ? Date.parse(f.resolutiondate) : now;
+  if (!Number.isFinite(start) || end <= start) return {};
+  const changes = (histories || [])
+    .flatMap((h) => (h.items || []).map((item) => ({ at: Date.parse(h.created), field: item.fieldId || item.field, from: item.from, to: item.to })))
+    .filter((c) => Number.isFinite(c.at) && (c.field === 'status' || c.field === 'assignee'))
+    .sort((a, b) => a.at - b.at);
+  const firstOf = (field) => changes.find((c) => c.field === field);
+  let status = firstOf('status') ? firstOf('status').from : f.status?.id;
+  let assignee = firstOf('assignee') ? firstOf('assignee').from : f.assignee?.accountId;
+  const out = {};
+  let at = start;
+  const credit = (until) => {
+    const from = Math.max(at, start);
+    const to = Math.min(until, end);
+    if (to > from && assignee && isHandlingStatus(statusById.get(String(status)), handlingStatuses)) out[assignee] = (out[assignee] || 0) + (to - from);
+    at = Math.max(at, until);
+  };
+  for (const c of changes) {
+    credit(c.at);
+    if (c.field === 'status') status = c.to;
+    else assignee = c.to;
+  }
+  credit(end);
+  return out;
 }
 
 /**
@@ -42,7 +94,7 @@ function emptyRow(agent) {
  * and the site's fields; `urgent` is the set of priority names counted as
  * urgent (P1/P2 by default). `now` dates the open tickets' age.
  */
-export function agentRows(resolved, open, { slaFields = [], satisfactionId = null, urgent = ['P1', 'P2', 'Highest', 'High', 'Critical'], now = Date.now() } = {}) {
+export function agentRows(resolved, open, { slaFields = [], satisfactionId = null, urgent = ['P1', 'P2', 'Highest', 'High', 'Critical'], now = Date.now(), handling = null, names = {} } = {}) {
   const rows = new Map();
   const row = (agent) => { if (!rows.has(agent.id)) rows.set(agent.id, emptyRow(agent)); return rows.get(agent.id); };
   const urgentSet = new Set(urgent.map((p) => p.toLowerCase()));
@@ -64,6 +116,16 @@ export function agentRows(resolved, open, { slaFields = [], satisfactionId = nul
     const type = f.issuetype?.name || f.requestType || 'Other';
     r.types[type] = (r.types[type] || 0) + 1;
     if (urgentSet.has(String(f.priority?.name || '').toLowerCase())) r.urgent += 1;
+  }
+  // Handling time per resolved ticket and assignee (`handling`: issue id -> { accountId: ms }).
+  if (handling) {
+    for (const issue of resolved || []) {
+      for (const [accountId, ms] of Object.entries(handling[issue.id] || {})) {
+        const r = row(accountId === 'team' ? { id: 'team', name: 'Team' } : { id: accountId, name: names[accountId] || rows.get(accountId)?.agent.name || 'Unknown' });
+        r.handlingMs += ms;
+        r.handled += 1;
+      }
+    }
   }
   for (const issue of open || []) {
     const r = row(agentOf(issue));
@@ -88,13 +150,21 @@ function summarise(r) {
     topTypes: typeList.slice(0, 3).map(([name, count]) => ({ name, share: r.resolved ? Math.round((count / r.resolved) * 100) : 0 })),
     open: r.open,
     oldestOpenDays: r.openAges.length ? Math.round(Math.max(...r.openAges)) : null,
+    // Average handling time: in-progress time per ticket the agent worked on.
+    handlingHours: round1(r.handlingMs / HOUR),
+    handled: r.handled,
+    ahtHours: r.handled ? round1(r.handlingMs / HOUR / r.handled) : null,
   };
 }
 
 /** Team totals over agent rows (what everyone sees), from the same tickets. */
 export function teamTotals(resolved, open, options = {}) {
   const asTeam = (issues) => (issues || []).map((i) => ({ ...i, fields: { ...i.fields, assignee: { accountId: 'team', displayName: 'Team' } } }));
-  const [total] = agentRows(asTeam(resolved), asTeam(open), options);
+  // Team handling: each ticket's handling time, whoever worked on it.
+  const handling = options.handling
+    ? Object.fromEntries(Object.entries(options.handling).map(([id, byAgent]) => [id, Object.values(byAgent).length ? { team: Object.values(byAgent).reduce((a, b) => a + b, 0) } : {}]))
+    : null;
+  const [total] = agentRows(asTeam(resolved), asTeam(open), { ...options, handling });
   const agents = new Set([...(resolved || []), ...(open || [])].map((i) => agentOf(i).id).filter((id) => id !== 'unassigned'));
   return { ...(total || summarise(emptyRow({ id: 'team', name: 'Team' }))), agents: agents.size };
 }
