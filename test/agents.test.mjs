@@ -161,3 +161,11 @@ test('history times as dates or epoch numbers, duplicates counted once', async (
   const moved = [{ id: 'm', created: at(1), author: { accountId: 'c3' }, items: [{ fieldId: 'status', from: '1', to: '3' }] }];
   assert.deepEqual(handlingTimes({ id: '9', fields: { created: at(0), resolutiondate: at(2), status: { id: '3' }, assignee: null } }, moved, statusById), { c3: 3600000 });
 });
+
+test('AHT in minutes for display', async () => {
+  const { minutesText, agentRows: rows } = await import('../src/agents.js');
+  assert.deepEqual([minutesText(null), minutesText(0), minutesText(4), minutesText(60), minutesText(80)], ['–', 'under 1 min', '4 min', '1 h', '1 h 20 min']);
+  const [r] = rows([{ id: '1', fields: { created: at(0), resolutiondate: at(1), assignee: ann } }], [], { handling: { 1: { a1: 4 * 60000 + 20000 } } });
+  assert.equal(r.ahtMinutes, 4);
+  assert.equal(r.ahtHours, 0.1);
+});

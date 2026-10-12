@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.17.3 (2026-10-12)
+
+- AHT is shown in minutes ("4 min", "1 h 20 min", "under 1 min") instead of tenths of an hour, so short handling times no longer show as 0 h. Sorting by AHT uses minutes too.
+
 ## 1.17.2 (2026-10-12)
 
 - **AHT fix:** ticket history times are read whether Jira sends them as dates or epoch numbers, and repeated history entries are counted once. Time in progress with nobody assigned goes to whoever moved the ticket there.

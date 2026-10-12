@@ -52,6 +52,16 @@ export function isHandlingStatus(status, handlingStatuses = []) {
   return status.category === 'indeterminate' && !WAITING.test(String(status.name));
 }
 
+/** AHT for display: "under 1 min", "4 min", "1 h 20 min". */
+export function minutesText(minutes) {
+  if (minutes === null || minutes === undefined) return '–';
+  if (minutes < 1) return 'under 1 min';
+  if (minutes < 60) return `${minutes} min`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m ? `${h} h ${m} min` : `${h} h`;
+}
+
 /** A history's time in ms: an ISO date, or epoch seconds or milliseconds. */
 export function changeTime(value) {
   if (typeof value === 'number' || /^\d+$/.test(String(value ?? ''))) {
@@ -179,6 +189,7 @@ function summarise(r) {
     handlingHours: round1(r.handlingMs / HOUR),
     handled: r.handled,
     ahtHours: r.handled ? round1(r.handlingMs / HOUR / r.handled) : null,
+    ahtMinutes: r.handled ? Math.round(r.handlingMs / 60000 / r.handled) : null,
   };
 }
 
