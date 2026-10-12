@@ -26,5 +26,8 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
     "vite": "^5.4.14"
+  },
+  "overrides": {
+    "prosemirror-view": "^1.42.3"
   }
 }
