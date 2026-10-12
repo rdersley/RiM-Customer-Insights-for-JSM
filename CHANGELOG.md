@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.17.1 (2026-10-12)
+
+- Team performance (agent figures and AHT) is only on the Internal tab. Customer reports no longer show it, and the server refuses it for customer analyses.
+
 ## 1.17.0 (2026-10-12)
 
 - **AHT (average handling time)** on Team performance: how long tickets were in progress while assigned to each agent, per ticket they worked on, plus total handling hours, for each agent (Jira admins) and the team. Worked out from each resolved ticket's status and assignee history; a ticket passed between agents splits its time. By default every "in progress" status counts except waiting ones (Waiting for customer, Pending, On hold…); settings (Internal → Handling time) can list the exact statuses instead.

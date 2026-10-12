@@ -127,6 +127,9 @@ mock.module('@forge/kvs', { namedExports: { kvs: { get: async () => null, set: a
 test('the resolver sends per-agent rows to Jira admins only', async () => {
   const { handler } = await import('../src/index.js');
   const call = () => handler({ call: { functionKey: 'agentPerformance', payload: { scope: 'internal', projects: ['SD'], startDate: '2026-10-01', endDate: '2026-10-10' } }, context: { accountType: 'licensed' } });
+  // Never for customer analyses, admin or not.
+  admin = true;
+  await assert.rejects(handler({ call: { functionKey: 'agentPerformance', payload: { organization: { id: '188', name: 'Ryanair Crew' }, startDate: '2026-10-01', endDate: '2026-10-10' } }, context: { accountType: 'licensed' } }), /only available on the Internal tab/);
   admin = false;
   const forAgent = await call();
   assert.equal(forAgent.agents, null);

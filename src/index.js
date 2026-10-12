@@ -250,6 +250,8 @@ const AGENT_OPEN = 1000;
 const AGENT_BUDGET_MS = 15000; // reading tickets; histories (AHT) get until 22s
 define('agentPerformance', async ({ payload, context }) => {
   if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
+  // Agent figures belong to internal analyses, never customer reports.
+  if (payload?.scope !== 'internal') throw new Error('Team performance is only available on the Internal tab.');
   const settings = await loadSettings();
   const config = analysisConfig(settings, payload);
   const breakdowns = await breakdownsFor(payload, settings);
