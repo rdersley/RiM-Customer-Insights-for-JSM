@@ -234,8 +234,11 @@ function App() {
       setLastQuery(query);
       setFlowLoading(true);
       invoke('analyzeFlow', query).then(setFlow).catch((e) => setFlowError(e.message || 'Flow counts failed.')).finally(() => setFlowLoading(false));
-      setTeam({ data: null, loading: true, error: '' });
-      invoke('agentPerformance', query).then((data) => setTeam({ data, loading: false, error: '' })).catch((e) => setTeam({ data: null, loading: false, error: e.message || 'Team performance couldn’t be worked out.' }));
+      // Team performance is for internal analyses only.
+      if (internal) {
+        setTeam({ data: null, loading: true, error: '' });
+        invoke('agentPerformance', query).then((data) => setTeam({ data, loading: false, error: '' })).catch((e) => setTeam({ data: null, loading: false, error: e.message || 'Team performance couldn’t be worked out.' }));
+      }
     } catch (e) { setError(e.message || 'Analysis failed. Check your Jira access and filters.'); }
     finally { setLoadingReport(false); }
   }
@@ -797,7 +800,7 @@ function App() {
 
       <FlowCard flow={flow} loading={flowLoading} error={flowError} timeOfDay={report.timeOfDay} />
 
-      <TeamPerformance data={team.data} loading={team.loading} error={team.error} />
+      {lastQuery?.scope === 'internal' && <TeamPerformance data={team.data} loading={team.loading} error={team.error} />}
 
       {report.breakdowns?.length > 0
         ? <div className="nq-grid ci-breakdowns">{report.breakdowns.map((b) => {
