@@ -287,17 +287,19 @@ define('agentPerformance', async ({ payload, context }) => {
   ]);
   const resolved = resolvedSlices.flat();
   const scale = resolved.length && total > resolved.length ? total / resolved.length : 1;
-  const { handling, names, handlingComplete } = await handlingFor(resolved, settings.handlingStatuses || [], deadline + 7000);
+  const { handling, names, handlingComplete, stats } = await handlingFor(resolved, settings.handlingStatuses || [], deadline + 7000);
+  // Which statuses these tickets passed through (most common first), so an admin can check the handling statuses.
+  const statusesSeen = stats ? Object.entries(stats.seen).sort((a, b) => b[1] - a[1]).slice(0, 15).map(([name, tickets]) => ({ name, tickets })) : [];
   const options = { slaFields: config.slaFields, satisfactionId, handling, names };
   const scaleRow = (row) => (scale > 1 ? { ...row, resolved: Math.round(row.resolved * scale), loggedHours: Math.round(row.loggedHours * scale * 10) / 10, handlingHours: Math.round(row.handlingHours * scale * 10) / 10 } : row);
-  console.log(`agentPerformance: ${total} resolved (${resolved.length} read), ${openTotal} open (${open.length} read), handling ${handling ? (handlingComplete ? 'complete' : 'partial') : 'skipped'}${admin ? ', per agent' : ', team only'}${cutShort ? ', cut short' : ''}`);
+  console.log(`agentPerformance: ${total} resolved (${resolved.length} read), ${openTotal} open (${open.length} read), handling ${handling ? `${handlingComplete ? 'complete' : 'partial'} (${stats.handled}/${Object.keys(handling).length} tickets with handling time, ${stats.unassigned} partly unassigned; statuses: ${statusesSeen.slice(0, 8).map((s) => `${s.name} ${s.tickets}`).join(', ')})` : 'skipped'}${admin ? ', per agent' : ', team only'}${cutShort ? ', cut short' : ''}`);
   return {
     resolvedTotal: total,
     openTotal,
     estimated: scale > 1 || open.length < openTotal,
     cutShort,
     // AHT from ticket histories; partial when they couldn't all be read in time.
-    handling: handling ? { complete: handlingComplete, statuses: settings.handlingStatuses?.length ? settings.handlingStatuses : null } : null,
+    handling: handling ? { complete: handlingComplete, statuses: settings.handlingStatuses?.length ? settings.handlingStatuses : null, tickets: Object.keys(handling).length, handled: stats.handled, unassigned: stats.unassigned, statusesSeen } : null,
     slaFields: config.slaFields.map(({ id, name }) => ({ id, name })),
     satisfaction: Boolean(satisfactionId),
     team: { ...scaleRow(teamTotals(resolved, open, options)), resolved: total, open: openTotal },
@@ -318,6 +320,7 @@ async function handlingFor(resolved, handlingStatuses, deadline) {
   const statusById = new Map((Array.isArray(statuses) ? statuses : []).map((s) => [String(s.id), { name: s.name, category: s.statusCategory?.key }]));
   const histories = new Map();
   const names = {};
+  const stats = { seen: {}, handled: 0, unassigned: 0 };
   let complete = true;
   for (let i = 0; i < resolved.length; i += 1000) {
     const ids = resolved.slice(i, i + 1000).map((issue) => String(issue.id)).filter(Boolean);
@@ -330,6 +333,8 @@ async function handlingFor(resolved, handlingStatuses, deadline) {
         body: JSON.stringify({ issueIdsOrKeys: ids, fieldIds: ['status', 'assignee'], maxResults: 1000, ...(token ? { nextPageToken: token } : {}) }),
       }));
       const page = await readJson(response, 'Ticket history');
+      // The response's shape, once, for checking AHT (types and counts only).
+      if (!histories.size) { const h = page.issueChangeLogs?.[0]?.changeHistories?.[0]; console.log(`agentPerformance: history shape: ${page.issueChangeLogs?.length ?? 0} tickets, created ${typeof h?.created} ${String(h?.created ?? '').slice(0, 25)}, item keys ${Object.keys(h?.items?.[0] || {}).join('/')}`); }
       for (const log of page.issueChangeLogs || []) {
         const list = histories.get(String(log.issueId)) || [];
         list.push(...(log.changeHistories || []));
@@ -338,6 +343,7 @@ async function handlingFor(resolved, handlingStatuses, deadline) {
           for (const item of h.items || []) {
             if ((item.fieldId || item.field) !== 'assignee') continue;
             if (item.from && item.fromString) names[item.from] = item.fromString;
+            if (h.author?.accountId && h.author.displayName) names[h.author.accountId] = h.author.displayName;
             if (item.to && item.toString) names[item.to] = item.toString;
           }
         }
@@ -349,9 +355,9 @@ async function handlingFor(resolved, handlingStatuses, deadline) {
   const handling = {};
   for (const issue of resolved) {
     if (!histories.has(String(issue.id)) && !complete) continue;
-    handling[issue.id] = handlingTimes(issue, histories.get(String(issue.id)) || [], statusById, handlingStatuses);
+    handling[issue.id] = handlingTimes(issue, histories.get(String(issue.id)) || [], statusById, handlingStatuses, Date.now(), stats);
   }
-  return { handling, names, handlingComplete: complete };
+  return { handling, names, handlingComplete: complete, stats };
 }
 
 // Internal analysis pickers: projects this user can see, and client values.

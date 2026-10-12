@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.17.2 (2026-10-12)
+
+- **AHT fix:** ticket history times are read whether Jira sends them as dates or epoch numbers, and repeated history entries are counted once. Time in progress with nobody assigned goes to whoever moved the ticket there.
+- **AHT check:** when few tickets have handling time, Team performance lists the statuses those tickets actually passed through, so the handling statuses in settings can be matched exactly.
+- Security: forces the patched prosemirror-view (npm audit).
+
 ## 1.17.1 (2026-10-12)
 
 - Team performance (agent figures and AHT) is only on the Internal tab. Customer reports no longer show it, and the server refuses it for customer analyses.
