@@ -52,39 +52,64 @@ export function isHandlingStatus(status, handlingStatuses = []) {
   return status.category === 'indeterminate' && !WAITING.test(String(status.name));
 }
 
+/** A history's time in ms: an ISO date, or epoch seconds or milliseconds. */
+export function changeTime(value) {
+  if (typeof value === 'number' || /^\d+$/.test(String(value ?? ''))) {
+    const n = Number(value);
+    return n < 1e12 ? n * 1000 : n;
+  }
+  return Date.parse(value);
+}
+
 /**
  * Milliseconds each assignee had a ticket in a handling status, from its
  * status and assignee history (bulk changelog histories, any order). The
  * ticket's state before its first change comes from that change's "from";
  * with no changes, from its current status and assignee. Time runs from
- * creation to resolution (or `now`). Returns { accountId: ms }.
+ * creation to resolution (or `now`). Returns { accountId: ms }. Time in a
+ * handling status with nobody assigned goes to whoever moved the ticket into
+ * that status, else to "unassigned". `stats`, when given, collects the status
+ * names seen and how many tickets had handling time (for the admin's check).
  */
-export function handlingTimes(issue, histories, statusById, handlingStatuses = [], now = Date.now()) {
+export function handlingTimes(issue, histories, statusById, handlingStatuses = [], now = Date.now(), stats = null) {
   const f = issue.fields || {};
   const start = Date.parse(f.created);
   const end = Number.isFinite(Date.parse(f.resolutiondate)) ? Date.parse(f.resolutiondate) : now;
   if (!Number.isFinite(start) || end <= start) return {};
-  const changes = (histories || [])
-    .flatMap((h) => (h.items || []).map((item) => ({ at: Date.parse(h.created), field: item.fieldId || item.field, from: item.from, to: item.to })))
+  // Duplicate histories (the bulk API can repeat them across pages) are counted once.
+  const unique = [...new Map((histories || []).map((h, i) => [h.id ?? `i${i}`, h])).values()];
+  const changes = unique
+    .flatMap((h) => (h.items || []).map((item) => ({ at: changeTime(h.created), by: h.author?.accountId || null, field: item.fieldId || item.field, from: item.from, to: item.to })))
     .filter((c) => Number.isFinite(c.at) && (c.field === 'status' || c.field === 'assignee'))
     .sort((a, b) => a.at - b.at);
   const firstOf = (field) => changes.find((c) => c.field === field);
   let status = firstOf('status') ? firstOf('status').from : f.status?.id;
   let assignee = firstOf('assignee') ? firstOf('assignee').from : f.assignee?.accountId;
+  let mover = null; // who moved the ticket into its current status
   const out = {};
+  const seen = new Set();
   let at = start;
   const credit = (until) => {
     const from = Math.max(at, start);
     const to = Math.min(until, end);
-    if (to > from && assignee && isHandlingStatus(statusById.get(String(status)), handlingStatuses)) out[assignee] = (out[assignee] || 0) + (to - from);
+    const s = statusById.get(String(status));
+    if (s) seen.add(s.name);
+    if (to > from && isHandlingStatus(s, handlingStatuses)) {
+      const who = assignee || mover || 'unassigned';
+      out[who] = (out[who] || 0) + (to - from);
+    }
     at = Math.max(at, until);
   };
   for (const c of changes) {
     credit(c.at);
-    if (c.field === 'status') status = c.to;
-    else assignee = c.to;
+    if (c.field === 'status') { status = c.to; mover = c.by; } else assignee = c.to;
   }
   credit(end);
+  if (stats) {
+    for (const name of seen) stats.seen[name] = (stats.seen[name] || 0) + 1;
+    if (Object.keys(out).length) stats.handled += 1;
+    if (out.unassigned) stats.unassigned += 1;
+  }
   return out;
 }
 
@@ -121,7 +146,7 @@ export function agentRows(resolved, open, { slaFields = [], satisfactionId = nul
   if (handling) {
     for (const issue of resolved || []) {
       for (const [accountId, ms] of Object.entries(handling[issue.id] || {})) {
-        const r = row(accountId === 'team' ? { id: 'team', name: 'Team' } : { id: accountId, name: names[accountId] || rows.get(accountId)?.agent.name || 'Unknown' });
+        const r = row(accountId === 'team' ? { id: 'team', name: 'Team' } : accountId === 'unassigned' ? UNASSIGNED : { id: accountId, name: names[accountId] || rows.get(accountId)?.agent.name || 'Unknown' });
         r.handlingMs += ms;
         r.handled += 1;
       }

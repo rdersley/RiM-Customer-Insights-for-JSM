@@ -143,3 +143,21 @@ test('the resolver sends per-agent rows to Jira admins only', async () => {
   assert.equal(forAdmin.handling.complete, true);
   assert.deepEqual(forAdmin.agents.map((r) => r.ahtHours), [5.3, 30]);
 });
+
+test('history times as dates or epoch numbers, duplicates counted once', async () => {
+  const { changeTime } = await import('../src/agents.js');
+  const iso = '2026-10-01T10:00:00.000Z';
+  assert.equal(changeTime(iso), Date.parse(iso));
+  assert.equal(changeTime(Date.parse(iso)), Date.parse(iso));
+  assert.equal(changeTime(Date.parse(iso) / 1000), Date.parse(iso));
+  assert.equal(changeTime(String(Date.parse(iso))), Date.parse(iso));
+  const epoch = histories.map((h, i) => ({ ...h, id: String(i), created: Date.parse(h.created) }));
+  assert.deepEqual(handlingTimes(ticket, [...epoch, ...epoch], statusById), { a1: 3600000, b2: 7200000 });
+  const stats = { seen: {}, handled: 0, unassigned: 0 };
+  handlingTimes(ticket, epoch, statusById, ['In Progress 1st Level'], Date.now(), stats);
+  assert.equal(stats.handled, 0);
+  assert.deepEqual(Object.keys(stats.seen).sort(), ['Done', 'In Progress', 'Open', 'Waiting for customer']);
+  // Unassigned while in progress: whoever moved it there.
+  const moved = [{ id: 'm', created: at(1), author: { accountId: 'c3' }, items: [{ fieldId: 'status', from: '1', to: '3' }] }];
+  assert.deepEqual(handlingTimes({ id: '9', fields: { created: at(0), resolutiondate: at(2), status: { id: '3' }, assignee: null } }, moved, statusById), { c3: 3600000 });
+});

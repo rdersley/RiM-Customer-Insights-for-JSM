@@ -47,6 +47,9 @@ export default function TeamPerformance({ data, loading, error }) {
       {data.satisfaction && <Kpi icon="☺" kind="info" label="Satisfaction" value={t.rating === null ? '–' : `${t.rating} / 5`} hint={`${n(t.rated)} rated`} />}
       <Kpi icon="▤" label="Open now" value={n(t.open)} hint={t.oldestOpenDays !== null ? `oldest ${n(t.oldestOpenDays)} days` : undefined} />
     </div>
+    {data.handling && data.handling.tickets > 0 && data.handling.handled / data.handling.tickets < 0.2 && <Notice kind="warning" title="Little or no handling time found">
+      Only {n(data.handling.handled)} of {n(data.handling.tickets)} resolved tickets spent time in {data.handling.statuses ? data.handling.statuses.join(', ') : 'an in-progress status'}. Statuses these tickets passed through: {data.handling.statusesSeen.map((s) => `${s.name} (${n(s.tickets)})`).join(', ')}. Check the handling statuses in Customer Insights settings (Internal → Handling time) match these names.
+    </Notice>}
     {data.handling && !data.handling.complete && <Notice>Not every ticket’s history could be read in time, so AHT covers the tickets that were. Try a shorter period.</Notice>}
     {data.cutShort && <Notice>Not every ticket could be read in time; figures cover the tickets that were. Try a shorter period.</Notice>}
     {data.agents ? <>
