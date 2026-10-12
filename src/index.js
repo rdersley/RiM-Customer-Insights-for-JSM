@@ -1,7 +1,8 @@
 import ResolverModule from '@forge/resolver';
 import { asUser, route } from '@forge/api';
 import { textOf } from './analysis.js';
-import { countIssues, filterFor, organisationsOf, parseQuery, pool, readJson, runAnalysis, searchPage } from './engine.js';
+import { countIssues, dateSlices, filterFor, organisationsOf, parseQuery, pool, readJson, runAnalysis, searchPage } from './engine.js';
+import { agentRows, satisfactionFieldId, teamTotals } from './agents.js';
 import { chartBuckets } from './analysis.js';
 import { AGE_BANDS, backlogAges, flowSummary, forecast, pastWeeks } from './flow.js';
 import { licenseAllows, UNLICENSED_MESSAGE } from './license.js';
@@ -238,6 +239,66 @@ define('knowledgeGaps', async ({ payload, context }) => {
   console.log(`knowledgeGaps: ${topics.length} issues, ${results.filter((r) => !r.articles.length && !r.error).length} without an article${failure ? ', search failed' : ''}`);
   if (failure && results.every((r) => r.error || !r.articles.length)) throw new Error(failure);
   return { results };
+});
+
+// Team performance (src/agents.js): tickets resolved in the period and open
+// now, per assignee. Per-agent rows only for Jira admins; everyone else gets
+// the team totals. Nothing is stored. Large periods are sampled evenly and
+// resolved counts scaled.
+const AGENT_SAMPLE = 2000;
+const AGENT_OPEN = 1000;
+const AGENT_BUDGET_MS = 20000;
+define('agentPerformance', async ({ payload, context }) => {
+  if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
+  const settings = await loadSettings();
+  const config = analysisConfig(settings, payload);
+  const breakdowns = await breakdownsFor(payload, settings);
+  const query = parseQuery(payload, filterFor(payload?.filter, breakdowns), { clientFields: allClientFields(settings) });
+  const deadline = Date.now() + AGENT_BUDGET_MS;
+  const [admin, fieldList] = await Promise.all([
+    isJiraAdmin(),
+    asUser().requestJira(route`/rest/api/3/field`, { headers: { Accept: 'application/json' } }).then((r) => readJson(r, 'Field list')),
+  ]);
+  const satisfactionId = satisfactionFieldId(fieldList);
+  const fields = ['assignee', 'issuetype', 'priority', ...config.slaFields.map((f) => f.id), ...(satisfactionId ? [satisfactionId] : [])].map((id) => ({ id, kind: null }));
+  const resolvedJql = (from, toExclusive) => `${query.scopeJql} AND resolved >= "${from}" AND resolved < "${toExclusive}"`;
+  const openJql = `${query.scopeJql} AND statusCategory != Done`;
+  const [total, openTotal] = await Promise.all([countIssues(resolvedJql(query.startDate, query.endExclusive), 'user'), countIssues(openJql, 'user')]);
+  // Fetch every resolved ticket, or an even sample across the period.
+  const slices = dateSlices(query.startDate, query.endExclusive, 10);
+  const perSlice = total <= AGENT_SAMPLE ? Infinity : Math.ceil(AGENT_SAMPLE / slices.length);
+  let cutShort = false;
+  const fetchAll = async (jql, max) => {
+    const issues = [];
+    let token;
+    do {
+      if (Date.now() > deadline) { cutShort = true; break; }
+      const page = await searchPage(jql, 100, token, fields, 'user');
+      issues.push(...page.issues);
+      token = page.nextPageToken;
+    } while (token && issues.length < max);
+    return issues.slice(0, max);
+  };
+  const [resolvedSlices, open] = await Promise.all([
+    pool(slices.map(([a, b]) => () => fetchAll(resolvedJql(a, b), perSlice)), 4),
+    fetchAll(openJql, AGENT_OPEN),
+  ]);
+  const resolved = resolvedSlices.flat();
+  const scale = resolved.length && total > resolved.length ? total / resolved.length : 1;
+  const options = { slaFields: config.slaFields, satisfactionId };
+  const scaleRow = (row) => (scale > 1 ? { ...row, resolved: Math.round(row.resolved * scale), loggedHours: Math.round(row.loggedHours * scale * 10) / 10 } : row);
+  console.log(`agentPerformance: ${total} resolved (${resolved.length} read), ${openTotal} open (${open.length} read)${admin ? ', per agent' : ', team only'}${cutShort ? ', cut short' : ''}`);
+  return {
+    resolvedTotal: total,
+    openTotal,
+    estimated: scale > 1 || open.length < openTotal,
+    cutShort,
+    slaFields: config.slaFields.map(({ id, name }) => ({ id, name })),
+    satisfaction: Boolean(satisfactionId),
+    team: { ...scaleRow(teamTotals(resolved, open, options)), resolved: total, open: openTotal },
+    // Per-agent figures are for Jira admins only.
+    agents: admin ? agentRows(resolved, open, options).map(scaleRow) : null,
+  };
 });
 
 // Internal analysis pickers: projects this user can see, and client values.
