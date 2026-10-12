@@ -1,6 +1,6 @@
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { agentRows, ratingOf, satisfactionFieldId, teamTotals } from '../src/agents.js';
+import { agentRows, handlingTimes, isHandlingStatus, ratingOf, satisfactionFieldId, teamTotals } from '../src/agents.js';
 
 const NOW = Date.parse('2026-10-12T12:00:00Z');
 const SLA = 'customfield_500';
@@ -53,6 +53,49 @@ test('team totals cover everyone, without names', () => {
   assert.equal(satisfactionFieldId([{ id: CSAT, schema: { custom: 'com.atlassian.servicedesk:sd-request-feedback' } }]), CSAT);
 });
 
+// ---- AHT ----------------------------------------------------------------------
+const statusById = new Map([
+  ['1', { name: 'Open', category: 'new' }],
+  ['3', { name: 'In Progress', category: 'indeterminate' }],
+  ['4', { name: 'Waiting for customer', category: 'indeterminate' }],
+  ['5', { name: 'Done', category: 'done' }],
+]);
+const at = (h) => new Date(Date.parse('2026-10-01T09:00:00Z') + h * 3600000).toISOString();
+const ticket = { id: '100', fields: { created: at(0), resolutiondate: at(5), status: { id: '5' }, assignee: { accountId: 'b2' } } };
+const histories = [
+  { created: at(1), items: [{ fieldId: 'status', from: '1', to: '3' }] },
+  { created: at(2), items: [{ fieldId: 'assignee', from: 'a1', fromString: 'Ann', to: 'b2', toString: 'Bob' }] },
+  { created: at(3), items: [{ fieldId: 'status', from: '3', to: '4' }] },
+  { created: at(4), items: [{ fieldId: 'status', from: '4', to: '3' }] },
+  { created: at(5), items: [{ fieldId: 'status', from: '3', to: '5' }] },
+];
+
+test('AHT: in-progress time per assignee from the ticket history; waiting time does not count', () => {
+  assert.equal(isHandlingStatus({ name: 'In Progress', category: 'indeterminate' }), true);
+  assert.equal(isHandlingStatus({ name: 'Waiting for customer', category: 'indeterminate' }), false);
+  assert.equal(isHandlingStatus({ name: 'Open', category: 'new' }), false);
+  assert.equal(isHandlingStatus({ name: 'Triage', category: 'new' }, ['triage']), true);
+  // Ann 09–10 Open, 10–11 In Progress (1 h); Bob 11–12 In Progress (1 h), 12–13 waiting, 13–14 In Progress (1 h).
+  assert.deepEqual(handlingTimes(ticket, [...histories].reverse(), statusById), { a1: 3600000, b2: 7200000 });
+  // Statuses chosen in settings instead.
+  assert.deepEqual(handlingTimes(ticket, histories, statusById, ['Waiting for customer']), { b2: 3600000 });
+  // No history: the current status and assignee for the whole time.
+  assert.deepEqual(handlingTimes({ id: '1', fields: { created: at(0), resolutiondate: at(2), status: { id: '3' }, assignee: { accountId: 'a1' } } }, [], statusById), { a1: 7200000 });
+});
+
+test('AHT per agent and for the team', () => {
+  const t1 = { ...ticket, fields: { ...ticket.fields, assignee: bob } };
+  const t2 = { id: '101', fields: { created: at(0), resolutiondate: at(1), assignee: ann } };
+  const handling = { 100: { a1: 3600000, b2: 7200000 }, 101: { a1: 1800000 } };
+  const rows = agentRows([t1, t2], [], { handling, names: { a1: 'Ann', b2: 'Bob' } });
+  const ann1 = rows.find((r) => r.agent.id === 'a1');
+  const bob1 = rows.find((r) => r.agent.id === 'b2');
+  assert.deepEqual([ann1.handled, ann1.handlingHours, ann1.ahtHours], [2, 1.5, 0.8]);
+  assert.deepEqual([bob1.handled, bob1.handlingHours, bob1.ahtHours], [1, 2, 2]);
+  const team = teamTotals([t1, t2], [], { handling });
+  assert.deepEqual([team.handled, team.handlingHours, team.ahtHours], [2, 3.5, 1.8]);
+});
+
 // The resolver: per-agent rows only for Jira admins.
 let admin = false;
 mock.module('@forge/api', {
@@ -64,11 +107,13 @@ mock.module('@forge/api', {
         const json = (body) => new Response(JSON.stringify(body), { status: 200 });
         if (path.startsWith('/rest/api/3/mypermissions')) return json({ permissions: { ADMINISTER: { havePermission: admin } } });
         if (path === '/rest/api/3/field') return json([{ id: CSAT, schema: { custom: 'com.atlassian.servicedesk:sd-request-feedback' } }]);
+        if (path === '/rest/api/3/status') return json([{ id: '3', name: 'In Progress', statusCategory: { key: 'indeterminate' } }]);
+        if (path === '/rest/api/3/changelog/bulkfetch') return json({ issueChangeLogs: JSON.parse(init.body).issueIdsOrKeys.map((id) => ({ issueId: id, changeHistories: [] })) });
         if (path === '/rest/api/3/search/approximate-count') return json({ count: JSON.parse(init.body).jql.includes('resolved >=') ? 4 : 3 });
         if (path === '/rest/api/3/search/jql') {
           const { jql } = JSON.parse(init.body);
           // Every resolved ticket is in the first date slice.
-          if (jql.includes('resolved >= "2026-10-01"')) return json({ issues: resolved.slice(0, 4).map((i, n) => ({ key: `SD-${n}`, ...i })) });
+          if (jql.includes('resolved >= "2026-10-01"')) return json({ issues: resolved.slice(0, 4).map((i, n) => ({ id: String(200 + n), key: `SD-${n}`, ...i, fields: { ...i.fields, status: { id: '3' } } })) });
           if (jql.includes('statusCategory != Done')) return json({ issues: open.map((i, n) => ({ key: `SD-${10 + n}`, ...i })) });
           return json({ issues: [] });
         }
@@ -91,4 +136,7 @@ test('the resolver sends per-agent rows to Jira admins only', async () => {
   admin = true;
   const forAdmin = await call();
   assert.deepEqual(forAdmin.agents.map((r) => r.agent.name), ['Ann', 'Bob']);
+  // No history in the mock: each ticket was In Progress from creation to resolution.
+  assert.equal(forAdmin.handling.complete, true);
+  assert.deepEqual(forAdmin.agents.map((r) => r.ahtHours), [5.3, 30]);
 });

@@ -1,8 +1,8 @@
 import ResolverModule from '@forge/resolver';
 import { asUser, route } from '@forge/api';
 import { textOf } from './analysis.js';
-import { countIssues, dateSlices, filterFor, organisationsOf, parseQuery, pool, readJson, runAnalysis, searchPage } from './engine.js';
-import { agentRows, satisfactionFieldId, teamTotals } from './agents.js';
+import { countIssues, dateSlices, filterFor, organisationsOf, parseQuery, pool, readJson, requestWithRetry, runAnalysis, searchPage } from './engine.js';
+import { agentRows, handlingTimes, satisfactionFieldId, teamTotals } from './agents.js';
 import { chartBuckets } from './analysis.js';
 import { AGE_BANDS, backlogAges, flowSummary, forecast, pastWeeks } from './flow.js';
 import { licenseAllows, UNLICENSED_MESSAGE } from './license.js';
@@ -247,7 +247,7 @@ define('knowledgeGaps', async ({ payload, context }) => {
 // resolved counts scaled.
 const AGENT_SAMPLE = 2000;
 const AGENT_OPEN = 1000;
-const AGENT_BUDGET_MS = 20000;
+const AGENT_BUDGET_MS = 15000; // reading tickets; histories (AHT) get until 22s
 define('agentPerformance', async ({ payload, context }) => {
   if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
   const settings = await loadSettings();
@@ -285,14 +285,17 @@ define('agentPerformance', async ({ payload, context }) => {
   ]);
   const resolved = resolvedSlices.flat();
   const scale = resolved.length && total > resolved.length ? total / resolved.length : 1;
-  const options = { slaFields: config.slaFields, satisfactionId };
-  const scaleRow = (row) => (scale > 1 ? { ...row, resolved: Math.round(row.resolved * scale), loggedHours: Math.round(row.loggedHours * scale * 10) / 10 } : row);
-  console.log(`agentPerformance: ${total} resolved (${resolved.length} read), ${openTotal} open (${open.length} read)${admin ? ', per agent' : ', team only'}${cutShort ? ', cut short' : ''}`);
+  const { handling, names, handlingComplete } = await handlingFor(resolved, settings.handlingStatuses || [], deadline + 7000);
+  const options = { slaFields: config.slaFields, satisfactionId, handling, names };
+  const scaleRow = (row) => (scale > 1 ? { ...row, resolved: Math.round(row.resolved * scale), loggedHours: Math.round(row.loggedHours * scale * 10) / 10, handlingHours: Math.round(row.handlingHours * scale * 10) / 10 } : row);
+  console.log(`agentPerformance: ${total} resolved (${resolved.length} read), ${openTotal} open (${open.length} read), handling ${handling ? (handlingComplete ? 'complete' : 'partial') : 'skipped'}${admin ? ', per agent' : ', team only'}${cutShort ? ', cut short' : ''}`);
   return {
     resolvedTotal: total,
     openTotal,
     estimated: scale > 1 || open.length < openTotal,
     cutShort,
+    // AHT from ticket histories; partial when they couldn't all be read in time.
+    handling: handling ? { complete: handlingComplete, statuses: settings.handlingStatuses?.length ? settings.handlingStatuses : null } : null,
     slaFields: config.slaFields.map(({ id, name }) => ({ id, name })),
     satisfaction: Boolean(satisfactionId),
     team: { ...scaleRow(teamTotals(resolved, open, options)), resolved: total, open: openTotal },
@@ -300,6 +303,54 @@ define('agentPerformance', async ({ payload, context }) => {
     agents: admin ? agentRows(resolved, open, options).map(scaleRow) : null,
   };
 });
+
+/**
+ * Handling time per resolved ticket and assignee, from status and assignee
+ * history (POST /rest/api/3/changelog/bulkfetch, up to 1,000 tickets a call)
+ * and the site's statuses. Stops at `deadline`; `handlingComplete` says
+ * whether every ticket's history was read.
+ */
+async function handlingFor(resolved, handlingStatuses, deadline) {
+  if (!resolved.length || Date.now() > deadline - 4000) return { handling: null, names: {}, handlingComplete: false };
+  const statuses = await readJson(await asUser().requestJira(route`/rest/api/3/status`, { headers: { Accept: 'application/json' } }), 'Statuses');
+  const statusById = new Map((Array.isArray(statuses) ? statuses : []).map((s) => [String(s.id), { name: s.name, category: s.statusCategory?.key }]));
+  const histories = new Map();
+  const names = {};
+  let complete = true;
+  for (let i = 0; i < resolved.length; i += 1000) {
+    const ids = resolved.slice(i, i + 1000).map((issue) => String(issue.id)).filter(Boolean);
+    let token;
+    do {
+      if (Date.now() > deadline) { complete = false; break; }
+      const response = await requestWithRetry(() => asUser().requestJira(route`/rest/api/3/changelog/bulkfetch`, {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ issueIdsOrKeys: ids, fieldIds: ['status', 'assignee'], maxResults: 1000, ...(token ? { nextPageToken: token } : {}) }),
+      }));
+      const page = await readJson(response, 'Ticket history');
+      for (const log of page.issueChangeLogs || []) {
+        const list = histories.get(String(log.issueId)) || [];
+        list.push(...(log.changeHistories || []));
+        histories.set(String(log.issueId), list);
+        for (const h of log.changeHistories || []) {
+          for (const item of h.items || []) {
+            if ((item.fieldId || item.field) !== 'assignee') continue;
+            if (item.from && item.fromString) names[item.from] = item.fromString;
+            if (item.to && item.toString) names[item.to] = item.toString;
+          }
+        }
+      }
+      token = page.nextPageToken;
+    } while (token);
+    if (!complete) break;
+  }
+  const handling = {};
+  for (const issue of resolved) {
+    if (!histories.has(String(issue.id)) && !complete) continue;
+    handling[issue.id] = handlingTimes(issue, histories.get(String(issue.id)) || [], statusById, handlingStatuses);
+  }
+  return { handling, names, handlingComplete: complete };
+}
 
 // Internal analysis pickers: projects this user can see, and client values.
 define('getProjects', async ({ context }) => {
