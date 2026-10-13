@@ -11,6 +11,7 @@ import { exportPdf } from './exportPdf.js';
 import CrewRates from './CrewRates.jsx';
 import { EffortCard, FlowCard, KnowledgeCard, SlaCard } from './WorkloadCards.jsx';
 import TeamPerformance from './TeamPerformance.jsx';
+import EscalationCard from './EscalationCard.jsx';
 import DevicesCard, { impactLine, PriorityLozenge } from './DevicesCard.jsx';
 import { crewRates } from '../../../src/headcount.js';
 import { applyMerges, categoriesOf, median, patternTrend, topShares } from '../../../src/analysis.js';
@@ -124,6 +125,8 @@ function App() {
   const [flowError, setFlowError] = useState('');
   // Team performance (agentPerformance), loaded after each analysis like flow.
   const [team, setTeam] = useState({ data: null, loading: false, error: '' });
+  // Escalation levels (internal, project settings that switch it on).
+  const [escalation, setEscalation] = useState({ data: null, loading: false, error: '' });
 
   useEffect(() => {
     view.getContext().then((context) => setSiteUrl(String(context?.siteUrl || '').replace(/\/$/, ''))).catch(() => {});
@@ -224,7 +227,7 @@ function App() {
     setFilter(nextFilter);
     cancelFull.current = true;
     setLoadingReport(true); setError(''); setReport(null); setAi(null); setAiError(''); setFullRun(null); setFullError('');
-    setFlow(null); setFlowError(''); setTeam({ data: null, loading: false, error: '' });
+    setFlow(null); setFlowError(''); setTeam({ data: null, loading: false, error: '' }); setEscalation({ data: null, loading: false, error: '' });
     const shared = { startDate: from, endDate: to, timeZone: LOCAL_ZONE, ...(nextFilter && { filter: { id: nextFilter.id, value: nextFilter.value } }) };
     const query = internal
       ? { scope: 'internal', projects: internalProjects, clients, ...shared }
@@ -239,6 +242,8 @@ function App() {
       if (internal) {
         setTeam({ data: null, loading: true, error: '' });
         invoke('agentPerformance', query).then((data) => setTeam({ data, loading: false, error: '' })).catch((e) => setTeam({ data: null, loading: false, error: e.message || 'Team performance couldn’t be worked out.' }));
+        setEscalation({ data: null, loading: true, error: '' });
+        invoke('escalation', query).then((data) => setEscalation({ data, loading: false, error: '' })).catch((e) => setEscalation({ data: null, loading: false, error: e.message || 'Escalation levels couldn’t be worked out.' }));
       }
     } catch (e) { setError(e.message || 'Analysis failed. Check your Jira access and filters.'); }
     finally { setLoadingReport(false); }
@@ -803,6 +808,8 @@ function App() {
       <FlowCard flow={flow} loading={flowLoading} error={flowError} timeOfDay={report.timeOfDay} />
 
       {lastQuery?.scope === 'internal' && <TeamPerformance data={team.data} loading={team.loading} error={team.error} />}
+
+      {lastQuery?.scope === 'internal' && <EscalationCard data={escalation.data} loading={escalation.loading} error={escalation.error} />}
 
       {report.breakdowns?.length > 0
         ? <div className="nq-grid ci-breakdowns">{report.breakdowns.map((b) => {

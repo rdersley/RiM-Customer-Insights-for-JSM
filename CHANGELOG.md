@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.19.0 (2026-10-13)
+
+- **Escalation levels** (Internal tab, per project settings, e.g. SD only): for tickets created in the period, the highest support level each reached (stayed at 1st level, went to 2nd, went to 3rd) with counts and percentages, and the time from creation to reaching 2nd and 3rd level (typical, average and 90th percentile). Worked out from status history. Switch it on in Settings → Internal → (project settings) → Escalation levels and list each level's statuses, or leave them empty to recognise "1st/2nd/3rd" in status names. The card shows which statuses counted as which level.
+
 ## 1.18.0 (2026-10-13)
 
 - **Devices affected:** choose the ticket field that holds the device ID or serial, and the device type field, in settings (Customers → Devices). Reports get a Devices affected card: distinct devices per recurring issue, by device type, against the fleet. **Live surges** show devices affected too (also in the incident ticket's description).

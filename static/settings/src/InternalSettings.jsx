@@ -113,6 +113,22 @@ export default function InternalSettings({ draft, update, fields, slaChoices, in
     <PatternSettings id={`cs-int-${selected}`} value={current.patterns} defaultSynonyms={DEFAULT_INTERNAL_SYNONYMS}
       onChange={(change) => set('patterns', { ...current.patterns, ...change })} />
 
+    {profile && <Card title="Escalation levels" description={`Internal reports for ${profile.name} show what support level tickets reach and how long they take to get to 2nd and 3rd level, from their status history.`}>
+      <div className="nq-stack">
+        <label className="cs-check">
+          <input type="checkbox" className="nq-check" checked={profile.escalation?.enabled === true}
+            onChange={(e) => setProfile({ escalation: { ...profile.escalation, enabled: e.target.checked } })} />
+          <span>Show escalation levels for these projects</span>
+        </label>
+        {profile.escalation?.enabled && ['1st level', '2nd level', '3rd level'].map((label, i) => <Field key={label} label={`${label} statuses`} htmlFor={`cs-esc-${i}`}
+          help={i === 0 ? 'One per line, for example In Progress 1st Level. Leave all three empty to recognise levels from status names (1st/first, 2nd/second, 3rd/third).' : undefined}>
+          <textarea id={`cs-esc-${i}`} className="nq-textarea" rows={2}
+            value={Array.isArray(profile.escalation?.levels?.[i]) ? profile.escalation.levels[i].join('\n') : (profile.escalation?.levels?.[i] || '')}
+            onChange={(e) => { const levels = [0, 1, 2].map((n) => (n === i ? e.target.value : profile.escalation?.levels?.[n] || [])); setProfile({ escalation: { ...profile.escalation, levels } }); }} />
+        </Field>)}
+      </div>
+    </Card>}
+
     <Card title="Handling time (AHT)" description="Team performance shows each agent's average handling time: how long tickets were in progress while assigned to them. This applies to every report.">
       <Field label="Statuses that count as handling" htmlFor="cs-handling"
         help="One per line, for example In Progress. Leave empty to count every “in progress” status except waiting ones (Waiting for customer, Pending, On hold…).">

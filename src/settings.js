@@ -6,6 +6,7 @@ import { sanitizeHeadcounts } from './headcount.js';
 import { DEFAULT_SURGE, sanitizeSurge } from './surge.js';
 import { slaFieldList } from './sla.js';
 import { DEFAULT_DEVICES, sanitizeDevices } from './devices.js';
+import { sanitizeEscalation } from './escalation.js';
 
 export const MAX_BREAKDOWNS = 5;
 // Fewest tickets (in the analysed sample) for a group to count as a pattern.
@@ -144,7 +145,7 @@ export function analysisConfig(settings, payload) {
   const owners = projects.map((k) => (s.projectProfiles || []).find((p) => p.projects.includes(k)) || null);
   const profile = projects.length && owners[0] && owners.every((p) => p === owners[0]) ? owners[0] : null;
   if (profile) {
-    return { profile: { id: profile.id, name: profile.name }, breakdowns: profile.breakdowns, clientFields: profile.clientFields, slaFields: profile.slaFields, patterns: { ...profile.patterns } };
+    return { profile: { id: profile.id, name: profile.name }, breakdowns: profile.breakdowns, clientFields: profile.clientFields, slaFields: profile.slaFields, patterns: { ...profile.patterns }, escalation: profile.escalation?.enabled ? profile.escalation : null };
   }
   const mixed = owners.some(Boolean);
   return { profile: null, mixed, breakdowns: s.internalBreakdowns || [], clientFields: s.clientFields || [], slaFields: s.slaFields || [], patterns: patternSettingsFor(s, true) };
@@ -239,6 +240,8 @@ export function sanitizeSettings(input, selectable, organizations = [], { slaCho
         clientFields: clientFieldList(p?.clientFields, selectable),
         slaFields: slaFieldList(p?.slaFields, slaChoices),
         patterns: internalPatternsOf(p?.patterns),
+        // Escalation levels card (e.g. SD only).
+        escalation: sanitizeEscalation(p?.escalation),
       };
     })
     .filter(Boolean)
