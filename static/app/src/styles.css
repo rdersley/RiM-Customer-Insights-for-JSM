@@ -193,3 +193,6 @@
 
 /* Devices affected */
 .ci-devices .ci-num { text-align: right; white-space: nowrap; }
+
+/* Escalation levels */
+.ci-escalation .ci-num { text-align: right; white-space: nowrap; }

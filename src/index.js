@@ -18,6 +18,7 @@ import { allClientFields, analysisConfig, autoInternalBreakdowns, organisationBr
 import { problemFields, problemRequest, relatesLinkType } from './problem.js';
 import { slaFieldChoices, slaState } from './sla.js';
 import { deviceIdChoices, deviceOf } from './devices.js';
+import { escalationOf, escalationSummary, levelOf } from './escalation.js';
 import { searchWords } from './surge.js';
 
 // This package is "type": "module"; Forge's bundler then hands CommonJS packages
@@ -361,6 +362,78 @@ async function handlingFor(resolved, handlingStatuses, deadline) {
     handling[issue.id] = handlingTimes(issue, histories.get(String(issue.id)) || [], statusById, handlingStatuses, Date.now(), stats);
   }
   return { handling, names, handlingComplete: complete, stats };
+}
+
+// Escalation levels (src/escalation.js): for tickets created in the period, the
+// highest support level reached and the time to reach 2nd and 3rd level, from
+// status history. Internal analyses whose project settings switch it on only.
+const ESCALATION_SAMPLE = 2000;
+define('escalation', async ({ payload, context }) => {
+  if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
+  if (payload?.scope !== 'internal') throw new Error('Escalation levels are only available on the Internal tab.');
+  const settings = await loadSettings();
+  const config = analysisConfig(settings, payload);
+  if (!config.escalation) return null;
+  const breakdowns = await breakdownsFor(payload, settings);
+  const query = parseQuery(payload, filterFor(payload?.filter, breakdowns), { clientFields: allClientFields(settings) });
+  const deadline = Date.now() + 22000;
+  const createdJql = (from, toExclusive) => query.between(from, toExclusive);
+  const total = await countIssues(createdJql(query.startDate, query.endExclusive), 'user');
+  const slices = dateSlices(query.startDate, query.endExclusive, 10);
+  const perSlice = total <= ESCALATION_SAMPLE ? Infinity : Math.ceil(ESCALATION_SAMPLE / slices.length);
+  const sliceTickets = await pool(slices.map(([a, b]) => async () => {
+    const out = [];
+    let token;
+    do {
+      if (Date.now() > deadline - 8000) break;
+      const page = await searchPage(createdJql(a, b), 100, token, [], 'user');
+      out.push(...page.issues);
+      token = page.nextPageToken;
+    } while (token && out.length < perSlice);
+    return out.slice(0, perSlice);
+  }), 4);
+  const tickets = sliceTickets.flat();
+  const [statuses, { histories, complete }] = await Promise.all([
+    readJson(await asUser().requestJira(route`/rest/api/3/status`, { headers: { Accept: 'application/json' } }), 'Statuses'),
+    fetchHistories(tickets, ['status'], deadline),
+  ]);
+  const statusById = new Map((Array.isArray(statuses) ? statuses : []).map((s) => [String(s.id), { name: s.name }]));
+  const results = tickets.filter((t) => complete || histories.has(String(t.id)))
+    .map((t) => escalationOf(t, histories.get(String(t.id)) || [], statusById, config.escalation.levels));
+  // Which statuses count as which level (for the card), from the statuses these tickets used.
+  const used = new Set();
+  for (const list of histories.values()) for (const h of list) for (const item of h.items || []) if ((item.fieldId || item.field) === 'status') { used.add(String(item.from)); used.add(String(item.to)); }
+  const mapping = [1, 2, 3].map((level) => ({ level, statuses: [...used].map((id) => statusById.get(id)?.name).filter((name) => name && levelOf(name, config.escalation.levels) === level).sort() }));
+  const summary = escalationSummary(results);
+  console.log(`escalation: ${total} created (${tickets.length} read, ${results.length} with history), levels ${summary.byLevel.map((l) => `${l.level}:${l.tickets}`).join(' ')}${complete ? '' : ', partial'}`);
+  return { total, sampled: tickets.length < total, complete, ...summary, mapping, profile: config.profile };
+});
+
+/** Status (or other field) history for tickets, 1,000 a call, until `deadline`. */
+async function fetchHistories(issues, fieldIds, deadline) {
+  const histories = new Map();
+  let complete = true;
+  for (let i = 0; i < issues.length && complete; i += 1000) {
+    const ids = issues.slice(i, i + 1000).map((issue) => String(issue.id)).filter(Boolean);
+    let token;
+    do {
+      if (Date.now() > deadline) { complete = false; break; }
+      const page = await readJson(await requestWithRetry(() => asUser().requestJira(route`/rest/api/3/changelog/bulkfetch`, {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ issueIdsOrKeys: ids, fieldIds, maxResults: 1000, ...(token ? { nextPageToken: token } : {}) }),
+      })), 'Ticket history');
+      for (const log of page.issueChangeLogs || []) {
+        const list = histories.get(String(log.issueId)) || [];
+        list.push(...(log.changeHistories || []));
+        histories.set(String(log.issueId), list);
+      }
+      token = page.nextPageToken;
+    } while (token);
+  }
+  // The bulk API can repeat histories across pages.
+  for (const [id, list] of histories) histories.set(id, [...new Map(list.map((h, n) => [h.id ?? `i${n}`, h])).values()]);
+  return { histories, complete };
 }
 
 // Internal analysis pickers: projects this user can see, and client values.
