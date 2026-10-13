@@ -1,7 +1,7 @@
 import ResolverModule from '@forge/resolver';
 import { asUser, route } from '@forge/api';
 import { textOf } from './analysis.js';
-import { countIssues, dateSlices, filterFor, organisationsOf, parseQuery, pool, readJson, requestWithRetry, runAnalysis, searchPage } from './engine.js';
+import { countIssues, dateSlices, deviceFieldIds, filterFor, organisationsOf, parseQuery, pool, readJson, requestWithRetry, runAnalysis, searchPage } from './engine.js';
 import { agentRows, handlingTimes, satisfactionFieldId, teamTotals } from './agents.js';
 import { chartBuckets } from './analysis.js';
 import { AGE_BANDS, backlogAges, flowSummary, forecast, pastWeeks } from './flow.js';
@@ -17,6 +17,7 @@ import { queueAlertCheck, queueRefresh } from './liveJobs.js';
 import { allClientFields, analysisConfig, autoInternalBreakdowns, organisationBreakdown, sanitizeSettings, selectableFields } from './settings.js';
 import { problemFields, problemRequest, relatesLinkType } from './problem.js';
 import { slaFieldChoices, slaState } from './sla.js';
+import { deviceIdChoices, deviceOf } from './devices.js';
 import { searchWords } from './surge.js';
 
 // This package is "type": "module"; Forge's bundler then hands CommonJS packages
@@ -134,7 +135,7 @@ define('fetchTickets', async ({ payload, context }) => {
   const tickets = [];
   let token = typeof payload.nextPageToken === 'string' ? payload.nextPageToken : undefined;
   for (let page = 0; page < FULL_PAGES_PER_CALL; page += 1) {
-    const result = await searchPage(query.between(from, toExclusive), 100, token, [...breakdowns, ...slaFields.map((f) => ({ id: f.id, kind: null }))]);
+    const result = await searchPage(query.between(from, toExclusive), 100, token, [...breakdowns, ...slaFields.map((f) => ({ id: f.id, kind: null })), ...deviceFieldIds(settings.devices).map((id) => ({ id, kind: null }))]);
     for (const issue of result.issues) {
       tickets.push({
         key: issue.key,
@@ -149,6 +150,8 @@ define('fetchTickets', async ({ payload, context }) => {
           status: { name: issue.fields?.status?.name || 'Unknown' },
           // SLAs reduced to 'met' / 'breached' (or null) to keep the payload small.
           ...Object.fromEntries(slaFields.map((f) => [f.id, slaState(issue.fields?.[f.id])])),
+          // The device (IDs and type) reduced the same way.
+          ...(settings.devices?.idFieldId ? { __device: deviceOf(issue, settings.devices) } : {}),
         },
       });
     }
@@ -167,7 +170,7 @@ define('analyze', async ({ payload, context }) => {
   const breakdowns = await breakdownsFor(payload, settings);
   const query = parseQuery(payload, filterFor(payload?.filter, breakdowns), { clientFields: allClientFields(settings) });
   // Resolvers are killed at 25s; runAnalysis stops starting new fetches after the budget.
-  const report = await runAnalysis(query, { breakdowns, minPatternSize, placeholders, synonyms, slaFields: config.slaFields, mode: 'user', budgetMs: FETCH_BUDGET_MS });
+  const report = await runAnalysis(query, { breakdowns, minPatternSize, placeholders, synonyms, slaFields: config.slaFields, devices: settings.devices, mode: 'user', budgetMs: FETCH_BUDGET_MS });
   return { ...report, settingsUsed: payload?.scope === 'internal' ? { profile: config.profile, mixed: Boolean(config.mixed) } : null };
 });
 
@@ -530,7 +533,7 @@ async function siteFields() {
 async function siteFieldLists() {
   const response = await asUser().requestJira(route`/rest/api/3/field`, { headers: { Accept: 'application/json' } });
   const all = await readJson(response, 'Field list');
-  return { selectable: selectableFields(all), slaChoices: slaFieldChoices(all) };
+  return { selectable: selectableFields(all), slaChoices: slaFieldChoices(all), idChoices: deviceIdChoices(all) };
 }
 
 /** The id of the alert ticket's issue type, checked against the project. */
@@ -595,12 +598,13 @@ define('createProblem', async ({ payload, context }) => {
 define('getSettings', async ({ context }) => {
   if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
   if (!(await isJiraAdmin())) return { isAdmin: false };
-  const [settings, { selectable: fields, slaChoices }, organizations] = await Promise.all([loadSettings(), siteFieldLists(), listOrganizations()]);
+  const [settings, { selectable: fields, slaChoices, idChoices }, organizations] = await Promise.all([loadSettings(), siteFieldLists(), listOrganizations()]);
   return {
     isAdmin: true,
     settings,
     fields,
     slaChoices,
+    idChoices,
     organizations,
   };
 });
@@ -608,8 +612,8 @@ define('getSettings', async ({ context }) => {
 define('saveSettings', async ({ payload, context }) => {
   if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
   if (!(await isJiraAdmin())) throw new Error('Only Jira admins can change Customer Insights settings.');
-  const [{ selectable: fields, slaChoices }, organizations] = await Promise.all([siteFieldLists(), listOrganizations()]);
-  const settings = sanitizeSettings(payload?.settings, fields, organizations, { slaChoices });
+  const [{ selectable: fields, slaChoices, idChoices }, organizations] = await Promise.all([siteFieldLists(), listOrganizations()]);
+  const settings = sanitizeSettings(payload?.settings, fields, organizations, { slaChoices, idChoices });
   if (settings.alerts.createIssue) settings.alerts.issueTypeId = await alertIssueType(settings.alerts);
   if (settings.surge.enabled && settings.surge.createIssue) settings.surge.issueTypeId = await alertIssueType(settings.surge);
   await saveSettings(settings);

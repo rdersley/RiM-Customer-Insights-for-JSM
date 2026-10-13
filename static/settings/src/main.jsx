@@ -13,6 +13,7 @@ import BackupRestore from './BackupRestore.jsx';
 import BreakdownFields from './BreakdownFields.jsx';
 import PatternSettings from './PatternSettings.jsx';
 import InternalSettings from './InternalSettings.jsx';
+import DeviceSettings from './DeviceSettings.jsx';
 import CrewNumbers from './CrewNumbers.jsx';
 import SurgeSettings from './SurgeSettings.jsx';
 import PdfLogos from './PdfLogos.jsx';
@@ -78,6 +79,9 @@ function App() {
         list={draft.breakdowns} onChange={(breakdowns) => { setSaved(false); setDraft((d) => ({ ...d, breakdowns })); }} />
 
       <PatternSettings id="cs-cust" value={draft} onChange={(change) => { setSaved(false); setDraft((d) => ({ ...d, ...change })); }} />
+
+      <DeviceSettings value={draft.devices} idChoices={state.idChoices || []} fields={state.fields}
+        onChange={(devices) => { setSaved(false); setDraft((d) => ({ ...d, devices })); }} />
 
       <CrewNumbers headcounts={draft.headcounts || []} organizations={state.organizations || []} breakdowns={state.settings.breakdowns} portalEnabled={draft.portalEnabled === true}
         onChange={(headcounts) => { setSaved(false); setDraft((d) => ({ ...d, headcounts })); }} />

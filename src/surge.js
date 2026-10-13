@@ -7,6 +7,8 @@
 // with the matching tickets linked. Later tickets on the same surge are added
 // to that ticket instead of raising another.
 import { groupIssues } from './analysis.js';
+import { deviceImpact, devicesAffected, fleetFromCrew, impactText } from './devices.js';
+import { headcountFor } from './headcount.js';
 
 export const SURGE_LIMITS = {
   windowMinutes: { min: 15, max: 240, default: 60 },
@@ -162,6 +164,7 @@ function surgeDoc(surge, siteUrl, intro) {
   const keyNode = (key) => (siteUrl ? link(key, `${siteUrl}/browse/${key}`) : text(key));
   const content = [paragraph(text(intro))];
   if (surge.bases?.length) content.push(paragraph(text(`Bases: ${surge.bases.slice(0, 30).join(', ')}${surge.bases.length > 30 ? ' …' : ''}.`)));
+  if (surge.devices?.length) content.push(paragraph(text(`Devices affected: ${impactText(surge.devices)}.${surge.suggested ? ` Suggested priority: ${surge.suggested}.` : ''}`)));
   if (surge.examples.length) {
     content.push({ type: 'bulletList', content: surge.examples.map((e) => ({ type: 'listItem', content: [paragraph(keyNode(e.key), text(` ${e.summary}`))] })) });
   }
@@ -199,7 +202,12 @@ export async function checkSurges(organization, settings, { jira, store, now = D
   const config = settings.surge;
   const breakdowns = settings.breakdowns || [];
   const orgClause = `organizations = "${escapeJql(organization.name)}"`;
-  const extra = [...breakdowns, ...config.copyFields.map((f) => ({ id: f.id, kind: null }))];
+  // Devices affected: the device fields, and the fleet from this organisation's crew numbers.
+  const deviceConfig = settings.devices?.idFieldId ? settings.devices : null;
+  const headcount = deviceConfig ? headcountFor(settings.headcounts, [organization.id]) : null;
+  const fleet = headcount ? fleetFromCrew(headcount.values.reduce((n, v) => n + v.count, 0), deviceConfig) : {};
+  const deviceFields = deviceConfig ? [deviceConfig.idFieldId, deviceConfig.typeFieldId].filter(Boolean).map((id) => ({ id, kind: null })) : [];
+  const extra = [...breakdowns, ...config.copyFields.map((f) => ({ id: f.id, kind: null })), ...deviceFields];
   const issues = await jira.search(`${orgClause} AND created >= "-${config.windowMinutes}m"`, MAX_FETCH, extra);
   const state = await store.loadSurgeState(organization.id);
   const incidents = (state.incidents || []).filter((s) => now - Date.parse(s.updatedAt) < KEEP_OPEN_MS);
@@ -214,6 +222,11 @@ export async function checkSurges(organization, settings, { jira, store, now = D
     }
     if (!existing && !isSurge(candidate.count, baseline, config.multiple)) continue;
     const surge = { ...candidate, baseline, windowMinutes: config.windowMinutes, organization };
+    if (deviceConfig) {
+      const keys = new Set(candidate.keys);
+      surge.devices = deviceImpact(devicesAffected(issues.filter((i) => keys.has(i.key)), deviceConfig), fleet, deviceConfig).slice(0, 4);
+      surge.suggested = surge.devices.find((d) => d.suggested)?.suggested || null;
+    }
     if (existing) {
       const added = candidate.keys.filter((k) => !existing.keys.includes(k));
       if (!added.length) continue;
@@ -221,6 +234,14 @@ export async function checkSurges(organization, settings, { jira, store, now = D
       existing.updatedAt = new Date(now).toISOString();
       existing.count = Math.max(existing.count, candidate.count);
       existing.bases = [...new Set([...(existing.bases || []), ...candidate.bases])];
+      // Devices: the larger count per type, from this window or earlier ones.
+      if (surge.devices) {
+        const byLabel = new Map((existing.devices || []).map((d) => [d.label, d]));
+        for (const d of surge.devices) if (!byLabel.has(d.label) || d.devices > byLabel.get(d.label).devices) byLabel.set(d.label, d);
+        existing.devices = [...byLabel.values()].sort((a, b) => (b.share ?? -1) - (a.share ?? -1));
+        existing.suggested = existing.devices.find((d) => d.suggested)?.suggested || null;
+        surge.devices = existing.devices; surge.suggested = existing.suggested;
+      }
       if (existing.issueKey) {
         try {
           const linkable = added.slice(0, Math.max(0, MAX_LINKS - existing.linked));
@@ -228,7 +249,7 @@ export async function checkSurges(organization, settings, { jira, store, now = D
           await jira.comment(existing.issueKey, updateComment({ ...surge, keys: existing.keys, bases: existing.bases }, added, jira.siteUrl));
         } catch (error) { existing.issueError = clip(error.message, 300); }
       }
-      await store.updateAlert(existing.alertId, { count: existing.count, keys: existing.keys.slice(0, 100), surge: { ...existing.surgeInfo, bases: existing.bases.length, updatedAt: existing.updatedAt } });
+      await store.updateAlert(existing.alertId, { count: existing.count, keys: existing.keys.slice(0, 100), surge: { ...existing.surgeInfo, bases: existing.bases.length, updatedAt: existing.updatedAt, devices: existing.devices || null, suggested: existing.suggested || null } });
       results.push({ updated: existing.issueKey || existing.alertId, added: added.length });
       continue;
     }
@@ -243,7 +264,7 @@ export async function checkSurges(organization, settings, { jira, store, now = D
       keys: surge.keys.slice(0, 100),
       examples: surge.examples.slice(0, 3),
       window: { from: today, to: today },
-      surge: { windowMinutes: config.windowMinutes, baseline: Math.round(baseline * 10) / 10, bases: surge.bases.length, startedAt: createdAt, updatedAt: createdAt },
+      surge: { windowMinutes: config.windowMinutes, baseline: Math.round(baseline * 10) / 10, bases: surge.bases.length, startedAt: createdAt, updatedAt: createdAt, devices: surge.devices || null, suggested: surge.suggested || null },
       createdAt,
     };
     let linked = 0;

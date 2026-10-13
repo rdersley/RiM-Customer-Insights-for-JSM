@@ -6,6 +6,9 @@ import { breakdownFieldIds, dimensionsOf, jqlClause } from './settings.js';
 import { validTimeZone } from './timeOfDay.js';
 
 export const DAY = 86400000;
+
+/** Jira fields the device settings need fetched with tickets. */
+export const deviceFieldIds = (devices) => (devices?.idFieldId ? [devices.idFieldId, devices.typeFieldId].filter(Boolean) : []);
 const PERIOD_SAMPLE = 900; // most tickets analysed per period (groupIssues' cap)
 const SAMPLE_SLICES = 9;
 const CONCURRENCY = 6;
@@ -200,9 +203,9 @@ export function parseQuery(payload, filter = null, { clientFields = [] } = {}) {
  * Exact totals, an even sample of up to 900 tickets per period, and the
  * report. `budgetMs` stops new fetches in time for the caller's limit.
  */
-export async function runAnalysis(query, { breakdowns = [], minPatternSize, placeholders, synonyms, slaFields = [], mode = 'user', budgetMs = 15000 } = {}) {
+export async function runAnalysis(query, { breakdowns = [], minPatternSize, placeholders, synonyms, slaFields = [], devices = null, mode = 'user', budgetMs = 15000 } = {}) {
   // SLA fields are fetched with the tickets but aren't breakdowns.
-  const fetched = [...breakdowns, ...slaFields.map((f) => ({ id: f.id, kind: null }))];
+  const fetched = [...breakdowns, ...slaFields.map((f) => ({ id: f.id, kind: null })), ...deviceFieldIds(devices).map((id) => ({ id, kind: null }))];
   const { startDate, endDate, previousStart, endExclusive, between } = query;
   const startedAt = Date.now();
   const deadline = startedAt + budgetMs;
@@ -248,7 +251,7 @@ export async function runAnalysis(query, { breakdowns = [], minPatternSize, plac
     timeSeries = buckets.map((b, i) => ({ date: b.date, count: counts[i] }));
   }
   const issues = [...currentIssues, ...previousIssues];
-  const report = buildReport(issues, startDate, endDate, { current: currentTotal, previous: previousTotal, timeSeries }, { breakdowns, minPatternSize, placeholders, synonyms, slaFields, timeZone: query.timeZone });
+  const report = buildReport(issues, startDate, endDate, { current: currentTotal, previous: previousTotal, timeSeries }, { breakdowns, minPatternSize, placeholders, synonyms, slaFields, devices, timeZone: query.timeZone });
   console.log(`analysis (${mode}): ${currentTotal}+${previousTotal} tickets, ${issues.length} fetched in ${Date.now() - startedAt}ms`);
   return {
     ...report,

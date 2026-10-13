@@ -39,3 +39,5 @@
 
 .cs-tabs { margin-bottom: var(--nq-space-050); }
 .cs-row--noportal { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto; }
+
+.cs-dev-row { grid-template-columns: minmax(0, 1fr) 110px minmax(0, 1.6fr) auto; }

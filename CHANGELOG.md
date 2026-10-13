@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.18.0 (2026-10-13)
+
+- **Devices affected:** choose the ticket field that holds the device ID or serial, and the device type field, in settings (Customers → Devices). Reports get a Devices affected card: distinct devices per recurring issue, by device type, against the fleet. **Live surges** show devices affected too (also in the incident ticket's description).
+- **Fleet from crew numbers:** each device type has a number per crew member (defaults: 1 vPOS and 1 card reader), so the fleet is worked out from the crew list until Assets is fully populated.
+- **Suggested priority:** P1 at 20%+ of a fleet affected and P2 at 5%+ by default (admin thresholds). Suggestions only; agents decide.
+
 ## 1.17.3 (2026-10-12)
 
 - AHT is shown in minutes ("4 min", "1 h 20 min", "under 1 min") instead of tenths of an hour, so short handling times no longer show as 0 h. Sorting by AHT uses minutes too.
