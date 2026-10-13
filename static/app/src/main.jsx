@@ -11,6 +11,7 @@ import { exportPdf } from './exportPdf.js';
 import CrewRates from './CrewRates.jsx';
 import { EffortCard, FlowCard, KnowledgeCard, SlaCard } from './WorkloadCards.jsx';
 import TeamPerformance from './TeamPerformance.jsx';
+import DevicesCard, { impactLine, PriorityLozenge } from './DevicesCard.jsx';
 import { crewRates } from '../../../src/headcount.js';
 import { applyMerges, categoriesOf, median, patternTrend, topShares } from '../../../src/analysis.js';
 import { jqlClause, jqlEmptyClause } from '../../../src/settings.js';
@@ -587,6 +588,7 @@ function App() {
         <div className="ci-alerts__text">
           <strong><Lozenge kind="danger">Surge</Lozenge> {alert.organization.name}: {alert.theme}</strong>
           <span className="nq-muted">{surgeText({ ...alert.surge, count: alert.count, bases: { length: alert.surge.bases } })} · since {new Date(alert.surge.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}{alert.surge.updatedAt !== alert.surge.startedAt ? `, last ticket added ${new Date(alert.surge.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
+          {alert.surge.devices?.length > 0 && <span>Devices affected: {impactLine(alert.surge.devices)} <PriorityLozenge suggested={alert.surge.suggested} /></span>}
           <span className="ci-alerts__links">
             {alert.keys?.length > 0 && <JiraLink href={jiraSearch(`key in (${alert.keys.slice(0, MAX_LINK_KEYS).join(', ')}) ORDER BY created DESC`)}>Open {Math.min(alert.keys.length, MAX_LINK_KEYS)} tickets in Jira</JiraLink>}
             {alert.issueKey && <> · Incident <JiraLink href={siteUrl ? `${siteUrl}/browse/${alert.issueKey}` : ''}>{alert.issueKey}</JiraLink> <span className="nq-muted">(send a System Alert from there)</span></>}
@@ -930,6 +932,8 @@ function App() {
       </Card>
 
       <EffortCard report={report} groups={groups} nameOf={patternName} />
+
+      <DevicesCard report={report} groups={groups} nameOf={patternName} headcount={headcount} />
 
       <SlaCard report={report} groups={groups} nameOf={patternName} />
 

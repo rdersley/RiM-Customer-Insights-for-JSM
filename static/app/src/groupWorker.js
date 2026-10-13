@@ -3,7 +3,7 @@ import { buildReport } from '../../../src/analysis.js';
 
 self.onmessage = ({ data }) => {
   try {
-    self.postMessage({ report: buildReport(data.issues, data.startDate, data.endDate, null, { limit: Infinity, breakdowns: data.breakdowns || [], minPatternSize: data.minPatternSize, placeholders: data.placeholders || [], synonyms: data.synonyms || [], slaFields: data.slaFields || [], timeZone: data.timeZone }) });
+    self.postMessage({ report: buildReport(data.issues, data.startDate, data.endDate, null, { limit: Infinity, breakdowns: data.breakdowns || [], minPatternSize: data.minPatternSize, placeholders: data.placeholders || [], synonyms: data.synonyms || [], slaFields: data.slaFields || [], devices: data.devices || null, timeZone: data.timeZone }) });
   } catch (error) {
     self.postMessage({ error: error.message || 'Grouping failed.' });
   }
