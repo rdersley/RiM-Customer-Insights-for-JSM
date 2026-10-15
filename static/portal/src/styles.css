@@ -82,3 +82,7 @@ a.cp-key:hover { text-decoration: underline; }
 .ci-crew__rate strong { text-align: right; }
 .ci-meter { height: 6px; background: var(--nq-bg-neutral); border-radius: var(--nq-radius-sm); overflow: hidden; }
 .ci-meter i { display: block; height: 100%; background: var(--nq-bg-brand); }
+
+/* Contact channel buttons above the heatmap */
+.ci-channels { margin-bottom: var(--nq-space-100); }
+.ci-channels p { margin: var(--nq-space-075, 6px) 0 0; }

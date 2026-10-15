@@ -80,6 +80,16 @@ function App() {
 
       <PatternSettings id="cs-cust" value={draft} onChange={(change) => { setSaved(false); setDraft((d) => ({ ...d, ...change })); }} />
 
+      <Card title="Contact channel" description="Split “when tickets arrive” by how tickets came in (for example Phone and Email), on reports, PDFs and the customer portal, so customers can see where peaks come from.">
+        <Field label="Channel field" htmlFor="cs-channel" help="A select field that records the contact channel, for example Issue Received by.">
+          <select id="cs-channel" className="nq-select" value={draft.channelField?.id || ''}
+            onChange={(e) => { const field = state.fields.find((x) => x.id === e.target.value); setSaved(false); setDraft((d) => ({ ...d, channelField: field ? { id: field.id, name: field.name, kind: field.kind } : null })); }}>
+            <option value="">Off</option>
+            {state.fields.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+          </select>
+        </Field>
+      </Card>
+
       <DeviceSettings value={draft.devices} idChoices={state.idChoices || []} fields={state.fields}
         onChange={(devices) => { setSaved(false); setDraft((d) => ({ ...d, devices })); }} />
 

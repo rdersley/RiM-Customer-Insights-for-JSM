@@ -31,8 +31,19 @@ const share = (value) => (Number.isFinite(Number(value)) && value !== null ? Mat
 const portalUrl = (value) => (/^https:\/\/[^\s"<>]+\/servicedesk\/customer\/portal\/\d+\/[A-Z][A-Z0-9_]*-\d+$/.test(String(value)) ? String(value) : '');
 
 const hourCounts = (value) => (Array.isArray(value) && value.length === 24 ? value.map(count) : null);
-const timeOfDayOf = (value) => (Array.isArray(value?.grid) && value.grid.length === 7 && value.grid.every((row) => Array.isArray(row) && row.length === 24)
-  ? { timeZone: validTimeZone(value.timeZone), grid: value.grid.map((row) => row.map(count)), estimated: Boolean(value.estimated) }
+const isGrid = (grid) => Array.isArray(grid) && grid.length === 7 && grid.every((row) => Array.isArray(row) && row.length === 24);
+const timeOfDayOf = (value) => (isGrid(value?.grid)
+  ? {
+    timeZone: validTimeZone(value.timeZone),
+    grid: value.grid.map((row) => row.map(count)),
+    estimated: Boolean(value.estimated),
+    // Per contact channel (Phone, Email…), when the site has a channel field.
+    ...(Array.isArray(value.byChannel) ? {
+      channelField: clip(value.channelField, 60),
+      byChannel: value.byChannel.filter((c) => isGrid(c?.grid) && clip(c?.value, 60)).slice(0, 7)
+        .map((c) => ({ value: clip(c.value, 60), tickets: count(c.tickets), share: Math.min(100, count(c.share)), grid: c.grid.map((row) => row.map(count)) })),
+    } : {}),
+  }
   : null);
 
 // Tickets per 100 crew (headcount.js), when an admin shows it on the portal.

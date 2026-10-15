@@ -310,6 +310,30 @@ export function buildPdf(JsPdf, c, { product = 'Customer Insights', version = ''
     });
     for (let h = 0; h < 24; h += 3) doc.text(String(h).padStart(2, '0'), M + labelW + h * cell + cell / 2, y + 7 * cellH + 3.5, { align: 'center' });
     y += 7 * cellH + 8;
+    // By contact channel (e.g. Phone, Email): where the peaks come from.
+    if (t.channels?.length) {
+      const cols = [{ label: 'Share', x: 70 }, { label: 'Busiest hours', x: 76 }, { label: 'Busiest day', x: 140 }, { label: 'Out of hours', x: W - M }];
+      room(14);
+      font(8, 'bold', MUTED);
+      doc.text(pdfSafe(t.channelField || 'Channel'), M, y + 4);
+      doc.text(cols[0].label, cols[0].x, y + 4, { align: 'right' });
+      doc.text(cols[1].label, cols[1].x, y + 4);
+      doc.text(cols[2].label, cols[2].x, y + 4);
+      doc.text(cols[3].label, cols[3].x, y + 4, { align: 'right' });
+      y += 6; doc.setDrawColor(...RULE); doc.setLineWidth(0.3); doc.line(M, y, W - M, y); y += 1;
+      for (const c of t.channels) {
+        room(lineHeight(9.5) + 1.5);
+        const base = y + lineHeight(9.5) * 0.78;
+        font(9.5, 'bold'); doc.text(split(c.value, 50)[0] || '', M, base);
+        font(9.5, 'normal'); doc.text(pdfSafe(c.share), cols[0].x, base, { align: 'right' });
+        doc.text(pdfSafe(c.busiestHours), cols[1].x, base);
+        doc.text(pdfSafe(c.busiestDay), cols[2].x, base);
+        font(9.5, 'normal', MUTED); doc.text(pdfSafe(c.outOfHours), cols[3].x, base, { align: 'right' });
+        y += lineHeight(9.5) + 0.5;
+        doc.setDrawColor(...RULE); doc.setLineWidth(0.15); doc.line(M, y, W - M, y); y += 1;
+      }
+      y += 3;
+    }
   }
 
   // ---- Data quality ------------------------------------------------------------------

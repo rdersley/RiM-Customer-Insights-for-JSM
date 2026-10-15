@@ -19,6 +19,7 @@ import { problemFields, problemRequest, relatesLinkType } from './problem.js';
 import { slaFieldChoices, slaState } from './sla.js';
 import { deviceIdChoices, deviceOf } from './devices.js';
 import { escalationOf, escalationSummary, levelOf } from './escalation.js';
+import { channelOf } from './channels.js';
 import { searchWords } from './surge.js';
 
 // This package is "type": "module"; Forge's bundler then hands CommonJS packages
@@ -136,7 +137,7 @@ define('fetchTickets', async ({ payload, context }) => {
   const tickets = [];
   let token = typeof payload.nextPageToken === 'string' ? payload.nextPageToken : undefined;
   for (let page = 0; page < FULL_PAGES_PER_CALL; page += 1) {
-    const result = await searchPage(query.between(from, toExclusive), 100, token, [...breakdowns, ...slaFields.map((f) => ({ id: f.id, kind: null })), ...deviceFieldIds(settings.devices).map((id) => ({ id, kind: null }))]);
+    const result = await searchPage(query.between(from, toExclusive), 100, token, [...breakdowns, ...slaFields.map((f) => ({ id: f.id, kind: null })), ...deviceFieldIds(settings.devices).map((id) => ({ id, kind: null })), ...(settings.channelField ? [{ id: settings.channelField.id, kind: null }] : [])]);
     for (const issue of result.issues) {
       tickets.push({
         key: issue.key,
@@ -153,6 +154,8 @@ define('fetchTickets', async ({ payload, context }) => {
           ...Object.fromEntries(slaFields.map((f) => [f.id, slaState(issue.fields?.[f.id])])),
           // The device (IDs and type) reduced the same way.
           ...(settings.devices?.idFieldId ? { __device: deviceOf(issue, settings.devices) } : {}),
+          // The contact channel, reduced to its value.
+          ...(settings.channelField ? { __channel: channelOf(issue, settings.channelField) } : {}),
         },
       });
     }
@@ -171,7 +174,7 @@ define('analyze', async ({ payload, context }) => {
   const breakdowns = await breakdownsFor(payload, settings);
   const query = parseQuery(payload, filterFor(payload?.filter, breakdowns), { clientFields: allClientFields(settings) });
   // Resolvers are killed at 25s; runAnalysis stops starting new fetches after the budget.
-  const report = await runAnalysis(query, { breakdowns, minPatternSize, placeholders, synonyms, slaFields: config.slaFields, devices: settings.devices, mode: 'user', budgetMs: FETCH_BUDGET_MS });
+  const report = await runAnalysis(query, { breakdowns, minPatternSize, placeholders, synonyms, slaFields: config.slaFields, devices: settings.devices, channelField: settings.channelField || null, mode: 'user', budgetMs: FETCH_BUDGET_MS });
   return { ...report, settingsUsed: payload?.scope === 'internal' ? { profile: config.profile, mixed: Boolean(config.mixed) } : null };
 });
 

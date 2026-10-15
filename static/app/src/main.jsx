@@ -12,6 +12,7 @@ import CrewRates from './CrewRates.jsx';
 import { EffortCard, FlowCard, KnowledgeCard, SlaCard } from './WorkloadCards.jsx';
 import TeamPerformance from './TeamPerformance.jsx';
 import EscalationCard from './EscalationCard.jsx';
+import ChannelPicker, { useChannel } from './ChannelPicker.jsx';
 import DevicesCard, { impactLine, PriorityLozenge } from './DevicesCard.jsx';
 import { crewRates } from '../../../src/headcount.js';
 import { applyMerges, categoriesOf, median, patternTrend, topShares } from '../../../src/analysis.js';
@@ -25,6 +26,27 @@ import { DAYS, hoursOf, outOfHoursShare, peakWindow, WORKING, windowText } from 
 const LOCAL_ZONE = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; } })();
 
 /** Day-of-week × hour heatmap; cell shade is the share of the busiest cell. */
+/** "When tickets arrive": heatmap, busiest hours and day, optionally by contact channel. */
+function WhenTicketsArrive({ timeOfDay }) {
+  const channel = useChannel(timeOfDay);
+  const { timeZone, estimated, analysed } = timeOfDay;
+  const grid = channel.grid;
+  const total = grid.flat().reduce((a, n) => a + n, 0) || 1;
+  const peak = peakWindow(hoursOf(grid));
+  const outside = outOfHoursShare(grid);
+  const dayTotals = grid.map((row) => row.reduce((a, n) => a + n, 0));
+  const busiestDay = DAYS[dayTotals.indexOf(Math.max(...dayTotals))];
+  return <Card title="When tickets arrive" description={`Created time in ${timeZone}. ${estimated ? `Shares of the ${analysed.toLocaleString()} analysed tickets.` : 'All tickets in the period.'}`}>
+    <ChannelPicker timeOfDay={timeOfDay} channel={channel} />
+    <div className="nq-kpis ci-when">
+      {peak && <Kpi icon="◷" label="Busiest 3 hours" value={windowText(peak)} hint={`${peak.share}% of ${channel.chosen ? channel.chosen.value : ''} tickets`.replace('  ', ' ')} />}
+      <Kpi icon="▦" label="Busiest day" value={busiestDay} hint={`${Math.round((Math.max(...dayTotals) / total) * 100)}% of tickets`} />
+      {outside !== null && <Kpi icon="☾" kind={outside >= 30 ? 'warning' : 'info'} label="Out of hours" value={`${outside}%`} hint={`outside ${String(WORKING.from).padStart(2, '0')}:00–${WORKING.to}:00 Mon–Fri`} />}
+    </div>
+    <TimeHeatmap grid={grid} />
+  </Card>;
+}
+
 function TimeHeatmap({ grid }) {
   const max = Math.max(1, ...grid.flat());
   return <div className="ci-heat" role="img" aria-label="Tickets by day of week and hour of day">
@@ -843,22 +865,7 @@ function App() {
         return field && !filter && canDrill(field, 'x') ? (value) => drill(field, value) : null;
       })()} />}
 
-      {report.timeOfDay?.analysed > 0 && (() => {
-        const { grid, timeZone, estimated, analysed } = report.timeOfDay;
-        const hours = hoursOf(grid);
-        const peak = peakWindow(hours);
-        const outside = outOfHoursShare(grid);
-        const dayTotals = grid.map((row) => row.reduce((a, n) => a + n, 0));
-        const busiestDay = DAYS[dayTotals.indexOf(Math.max(...dayTotals))];
-        return <Card title="When tickets arrive" description={`Created time in ${timeZone}. ${estimated ? `Shares of the ${analysed.toLocaleString()} analysed tickets.` : 'All tickets in the period.'}`}>
-          <div className="nq-kpis ci-when">
-            {peak && <Kpi icon="◷" label="Busiest 3 hours" value={windowText(peak)} hint={`${peak.share}% of tickets`} />}
-            <Kpi icon="▦" label="Busiest day" value={busiestDay} hint={`${Math.round((Math.max(...dayTotals) / Math.max(1, analysed)) * 100)}% of tickets`} />
-            {outside !== null && <Kpi icon="☾" kind={outside >= 30 ? 'warning' : 'info'} label="Out of hours" value={`${outside}%`} hint={`outside ${String(WORKING.from).padStart(2, '0')}:00–${WORKING.to}:00 Mon–Fri`} />}
-          </div>
-          <TimeHeatmap grid={grid} />
-        </Card>;
-      })()}
+      {report.timeOfDay?.analysed > 0 && <WhenTicketsArrive timeOfDay={report.timeOfDay} />}
 
       {qualityIssues.length > 0 && <Card
         title="Data quality"
