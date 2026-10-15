@@ -41,3 +41,13 @@
 .cs-row--noportal { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto; }
 
 .cs-dev-row { grid-template-columns: minmax(0, 1fr) 110px minmax(0, 1.6fr) auto; }
+
+/* Email reports */
+.cs-email-conn summary { cursor: pointer; display: flex; gap: var(--nq-space-100); align-items: center; }
+.cs-email-list, .cs-email-log { list-style: none; margin: var(--nq-space-075, 6px) 0; padding: 0; }
+.cs-email-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--nq-space-150); align-items: center; padding: var(--nq-space-100) 0; border-bottom: 1px solid var(--nq-border); }
+.cs-email-list p, .cs-email-log li { margin: 2px 0 0; }
+.cs-email-form { padding: var(--nq-space-150); border: 1px solid var(--nq-border); border-radius: var(--nq-radius-sm); margin-top: var(--nq-space-100); }
+.cs-email-when { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.cs-email-test { align-items: end; }
+@media (max-width: 700px) { .cs-email-list li, .cs-email-when { grid-template-columns: minmax(0, 1fr); } }

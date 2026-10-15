@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.21.0 (2026-10-15)
+
+Adds the app's first outside connection (Microsoft 365, for email only), so it is a major Forge version: a Jira admin approves the upgrade in Manage apps.
+
+- **Email reports:** Settings → Customers → Email reports. Connect a Microsoft 365 mailbox (tenant ID, app client ID, client secret, sender) and add schedules: organisation(s), report period, weekly (day and hour) or monthly (day and hour) in a time zone, or send-only; internal and customer recipients; subject and message; optional AI summary. Each send runs the analysis for the period as the app, builds the same PDF as Export PDF (with crew rates, devices, channel heatmaps and logos) and emails it as an attachment. **Send now**, **Send test** to one address, and a log of recent sends.
+- The client secret is stored encrypted as a Forge secret, never shown again, and left out of backups.
+
 ## 1.20.1 (2026-10-15)
 
 - **PDF: a heatmap per contact channel.** Under the overall "When tickets arrive" chart and the channel table, the agent and portal PDFs now draw a heatmap for each channel (e.g. Phone, then Email; up to 4, not "Not set"), with the same hour columns and each channel's share, busiest day and hours, so they can be compared on paper. Each chart is shaded against its own busiest hour.

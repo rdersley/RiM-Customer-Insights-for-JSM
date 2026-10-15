@@ -90,3 +90,9 @@ permissions:
   content:
     styles:
       - unsafe-inline
+  # Email reports (src/graph.js): Microsoft 365 sign-in and Graph sendMail only.
+  external:
+    fetch:
+      backend:
+        - address: https://login.microsoftonline.com
+        - address: https://graph.microsoft.com

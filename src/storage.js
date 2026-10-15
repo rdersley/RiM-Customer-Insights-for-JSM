@@ -94,6 +94,59 @@ export async function updateAlert(id, change) {
   if (alert) await saveAlert({ ...alert, ...change });
 }
 
+// Email reports (src/email.js): the Microsoft 365 connection, its client secret
+// (a Forge secret: encrypted, never sent to a page, not in backups), the
+// schedules, each schedule's state, and the last 50 sends.
+const EMAIL_CONFIG_KEY = 'email-config';
+const EMAIL_SECRET_KEY = 'email-client-secret';
+const SCHEDULES_KEY = 'email-schedules';
+const EMAIL_LOG_KEY = 'email-log';
+const scheduleStateKey = (id) => `email-state:${String(id).replace(/[^a-z0-9-]/gi, '')}`;
+
+export async function loadEmailConfig() {
+  return (await (await kvs()).get(EMAIL_CONFIG_KEY)) || {};
+}
+
+export async function saveEmailConfig(config) {
+  await (await kvs()).set(EMAIL_CONFIG_KEY, config);
+}
+
+export async function loadEmailSecret() {
+  return (await (await kvs()).getSecret(EMAIL_SECRET_KEY)) || '';
+}
+
+export async function saveEmailSecret(secret) {
+  if (secret) await (await kvs()).setSecret(EMAIL_SECRET_KEY, secret);
+  else await (await kvs()).deleteSecret(EMAIL_SECRET_KEY);
+}
+
+export async function loadSchedules() {
+  return (await (await kvs()).get(SCHEDULES_KEY)) || [];
+}
+
+export async function saveSchedules(schedules) {
+  await (await kvs()).set(SCHEDULES_KEY, schedules);
+}
+
+export async function loadScheduleState(id) {
+  return (await (await kvs()).get(scheduleStateKey(id))) || {};
+}
+
+export async function updateScheduleState(id, change) {
+  const state = { ...(await loadScheduleState(id)), ...change };
+  await (await kvs()).set(scheduleStateKey(id), state);
+  return state;
+}
+
+export async function loadEmailLog() {
+  return (await (await kvs()).get(EMAIL_LOG_KEY)) || [];
+}
+
+export async function logEmail(entry) {
+  const log = [entry, ...(await loadEmailLog())].slice(0, 50);
+  await (await kvs()).set(EMAIL_LOG_KEY, log);
+}
+
 // PDF logos (src/logos.js): 'company', or an organisation id.
 export async function loadLogo(target) {
   return (await (await kvs()).get(logoKey(target))) || null;

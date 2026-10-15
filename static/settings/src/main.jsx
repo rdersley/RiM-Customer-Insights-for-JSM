@@ -14,6 +14,7 @@ import BreakdownFields from './BreakdownFields.jsx';
 import PatternSettings from './PatternSettings.jsx';
 import InternalSettings from './InternalSettings.jsx';
 import DeviceSettings from './DeviceSettings.jsx';
+import EmailReports from './EmailReports.jsx';
 import CrewNumbers from './CrewNumbers.jsx';
 import SurgeSettings from './SurgeSettings.jsx';
 import PdfLogos from './PdfLogos.jsx';
@@ -170,6 +171,8 @@ function App() {
       </Card>
 
       <PdfLogos invoke={invoke} organizations={state.organizations || []} />
+
+      <EmailReports invoke={invoke} organizations={state.organizations || []} />
 
       </>}
 
