@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.21.1 (2026-10-15)
+
+- **Retail inMotion logo:** shown as the app's icon in the Jira sidebar and in place of the letter tile in the header of the Customer Insights page and its settings. (The customer portal keeps its own branding.)
+
 ## 1.21.0 (2026-10-15)
 
 Adds the app's first outside connection (Microsoft 365, for email only), so it is a major Forge version: a Jira admin approves the upgrade in Manage apps.

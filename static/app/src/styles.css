@@ -200,3 +200,7 @@
 /* Contact channel buttons above the heatmap */
 .ci-channels { margin-bottom: var(--nq-space-100); }
 .ci-channels p { margin: var(--nq-space-075, 6px) 0 0; }
+
+/* The Retail inMotion logo in the header, in place of the kit's letter tile. */
+.nq-header .nq-mark:has(.ci-logo) { background: none; box-shadow: none; padding: 0; overflow: visible; }
+.ci-logo { display: block; width: 100%; height: 100%; object-fit: contain; }
