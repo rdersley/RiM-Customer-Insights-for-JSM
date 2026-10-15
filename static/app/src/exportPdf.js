@@ -296,20 +296,23 @@ export function buildPdf(JsPdf, c, { product = 'Customer Insights', version = ''
     paragraph(`Busiest hours ${t.busiestHours || '–'} · busiest day ${t.busiestDay} · ${t.outOfHours} outside 08:00–18:00 Mon–Fri. Times in ${t.timeZone}.`, { size: 9.5, gap: 3 });
     const labelW = 10;
     const cell = (CW - labelW) / 24;
-    const cellH = 5;
-    room(7 * cellH + 8);
-    const max = Math.max(1, ...t.grid.flat());
-    font(7, 'normal', MUTED);
-    t.grid.forEach((row, d) => {
-      doc.text(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][d], M, y + d * cellH + 3.5);
-      row.forEach((n, h) => {
-        const share = n / max;
-        doc.setFillColor(...WHITE.map((w, i) => Math.round(w + (BRAND[i] - w) * (n ? 0.12 + 0.88 * share : 0.04))));
-        doc.rect(M + labelW + h * cell + 0.2, y + d * cellH + 0.2, cell - 0.4, cellH - 0.4, 'F');
+    // A day x hour heatmap, shaded against its own busiest hour.
+    const heatmap = (grid, cellH) => {
+      room(7 * cellH + 8);
+      const max = Math.max(1, ...grid.flat());
+      font(7, 'normal', MUTED);
+      grid.forEach((row, d) => {
+        doc.text(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][d], M, y + d * cellH + cellH * 0.7);
+        row.forEach((n, h) => {
+          const share = n / max;
+          doc.setFillColor(...WHITE.map((w, i) => Math.round(w + (BRAND[i] - w) * (n ? 0.12 + 0.88 * share : 0.04))));
+          doc.rect(M + labelW + h * cell + 0.2, y + d * cellH + 0.2, cell - 0.4, cellH - 0.4, 'F');
+        });
       });
-    });
-    for (let h = 0; h < 24; h += 3) doc.text(String(h).padStart(2, '0'), M + labelW + h * cell + cell / 2, y + 7 * cellH + 3.5, { align: 'center' });
-    y += 7 * cellH + 8;
+      for (let h = 0; h < 24; h += 3) doc.text(String(h).padStart(2, '0'), M + labelW + h * cell + cell / 2, y + 7 * cellH + 3.5, { align: 'center' });
+      y += 7 * cellH + 8;
+    };
+    heatmap(t.grid, 5);
     // By contact channel (e.g. Phone, Email): where the peaks come from.
     if (t.channels?.length) {
       const cols = [{ label: 'Share', x: 70 }, { label: 'Busiest hours', x: 76 }, { label: 'Busiest day', x: 140 }, { label: 'Out of hours', x: W - M }];
@@ -333,6 +336,17 @@ export function buildPdf(JsPdf, c, { product = 'Customer Insights', version = ''
         doc.setDrawColor(...RULE); doc.setLineWidth(0.15); doc.line(M, y, W - M, y); y += 1;
       }
       y += 3;
+      // A heatmap per channel (not "Not set"), one under another with the same
+      // hour columns, so Phone and Email can be compared side by side.
+      const charted = t.channels.filter((ch) => ch.value !== 'Not set' && ch.grid).slice(0, 4);
+      if (charted.length > 1) {
+        paragraph(`Each chart below is shaded against that channel's own busiest hour, so the shapes compare even when one channel is much bigger.`, { size: 8, rgb: MUTED, gap: 2 });
+        for (const ch of charted) {
+          room(lineHeight(10) + 7 * 4 + 10); // keep a channel's title with its chart
+          paragraph(`${ch.value}: ${ch.share} of ${nouns.toLowerCase()} · busiest ${ch.busiestDay} ${ch.busiestHours.replace(/ \(.*\)$/, '')} · ${ch.outOfHours} out of hours`, { size: 9.5, style: 'bold', gap: 1 });
+          heatmap(ch.grid, 4);
+        }
+      }
     }
   }
 

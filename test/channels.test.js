@@ -50,3 +50,24 @@ test('the split reaches the portal snapshot and both PDFs', () => {
   // No channel field: no split, and older snapshots still validate.
   assert.equal(snapshotFrom({ organization: { id: '1', name: 'X' }, period: { from: '2026-10-01', to: '2026-10-10' }, timeOfDay: { timeZone: 'UTC', grid: report.timeOfDay.grid } }, { detailed: true }).timeOfDay.byChannel, undefined);
 });
+
+test('the PDF draws a heatmap per channel to compare them', () => {
+  const report = buildReport(tickets, '2026-10-01', '2026-10-10', null, { channelField: field });
+  const snapshot = snapshotFrom({ organization: { id: '188', name: 'Ryanair Crew' }, period: { from: '2026-10-01', to: '2026-10-10' }, timeOfDay: report.timeOfDay }, { detailed: true });
+  const c = portalPdfContent(snapshot);
+  assert.ok(c.timeOfDay.channels.every((ch) => ch.grid.length === 7));
+  // Count heatmap cells as they are drawn.
+  const cellsDrawn = (content) => {
+    let cells = 0;
+    function Spy(...options) {
+      const doc = new jsPDF(...options);
+      const rect = doc.rect.bind(doc);
+      doc.rect = (...args) => { if (args[4] === 'F' && args[3] < 5) cells += 1; return rect(...args); };
+      return doc;
+    }
+    buildPdf(Spy, content);
+    return cells;
+  };
+  // Phone and Email each get a chart; "Not set" doesn't.
+  assert.equal(cellsDrawn(c) - cellsDrawn({ ...c, timeOfDay: { ...c.timeOfDay, channels: [] } }), 2 * 7 * 24);
+});

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.20.1 (2026-10-15)
+
+- **PDF: a heatmap per contact channel.** Under the overall "When tickets arrive" chart and the channel table, the agent and portal PDFs now draw a heatmap for each channel (e.g. Phone, then Email; up to 4, not "Not set"), with the same hour columns and each channel's share, busiest day and hours, so they can be compared on paper. Each chart is shaded against its own busiest hour.
+
 ## 1.20.0 (2026-10-15)
 
 - **When tickets arrive, by contact channel:** choose the channel field in settings (Customers → Contact channel, e.g. Issue Received by). The heatmap then has All / Phone / Email… buttons with each channel's share, busiest hours and busiest day, and a line comparing where each channel peaks. Shown on agent reports, the PDF (a table per channel), the customer portal's Service report (from its next live refresh) and the portal PDF. Read from each analysed ticket; no extra Jira calls.
