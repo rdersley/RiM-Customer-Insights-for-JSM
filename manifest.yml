@@ -5,6 +5,8 @@ modules:
       resolver:
         function: resolver
       title: Customer Insights
+      # The Retail inMotion logo (static/app/public/icon.png) in the Jira sidebar.
+      icon: resource:main;icon.png
   # Settings. Jira admins only; checked again on the server. Two entries for
   # one page: a useAsConfig page only appears behind "Configure" (now in
   # Administration > Connected apps), so a plain entry also lists it in the

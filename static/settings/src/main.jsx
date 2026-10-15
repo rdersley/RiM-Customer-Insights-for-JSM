@@ -18,6 +18,7 @@ import EmailReports from './EmailReports.jsx';
 import CrewNumbers from './CrewNumbers.jsx';
 import SurgeSettings from './SurgeSettings.jsx';
 import PdfLogos from './PdfLogos.jsx';
+import rimLogo from './assets/rim-logo.png';
 import './styles.css';
 
 enableTheme(view);
@@ -66,7 +67,7 @@ function App() {
   if (state.loading) return <div className="nq-page"><Loading text="Loading settings…" /></div>;
 
   return <div className="nq-page nq-page--narrow">
-    <AppHeader product={PRODUCT} subtitle="Settings for everyone using Customer Insights on this site." version={version} />
+    <AppHeader icon={<img className="ci-logo" src={rimLogo} alt="" />} product={PRODUCT} subtitle="Settings for everyone using Customer Insights on this site." version={version} />
     {state.error && <Notice kind="error" title="Something went wrong.">{state.error}</Notice>}
     {state.isAdmin === false && <Notice kind="warning">Only Jira admins can change Customer Insights settings.</Notice>}
     {error && <Notice kind="error" title="Settings weren’t saved.">{error}</Notice>}

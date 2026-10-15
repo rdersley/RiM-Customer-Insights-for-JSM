@@ -60,6 +60,7 @@ function TimeHeatmap({ grid }) {
     </React.Fragment>)}
   </div>;
 }
+import rimLogo from './assets/rim-logo.png';
 import './styles.css';
 
 enableTheme(view);
@@ -594,6 +595,7 @@ function App() {
 
   return <div className="nq-page">
     <AppHeader
+      icon={<img className="ci-logo" src={rimLogo} alt="" />}
       product={PRODUCT}
       subtitle="See recurring issues and what’s changing across a customer’s tickets."
       version={version}
