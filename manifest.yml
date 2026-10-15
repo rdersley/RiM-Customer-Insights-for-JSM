@@ -94,5 +94,5 @@ permissions:
   external:
     fetch:
       backend:
-        - https://login.microsoftonline.com
-        - https://graph.microsoft.com
+        - address: https://login.microsoftonline.com
+        - address: https://graph.microsoft.com
