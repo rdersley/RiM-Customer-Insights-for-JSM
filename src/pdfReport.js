@@ -9,7 +9,7 @@ import { gridSummary } from './channels.js';
 /** Per contact channel rows for the PDF: share, busiest hours and day, out of hours. */
 const channelRows = (byChannel) => (Array.isArray(byChannel) ? byChannel : []).map((c) => {
   const s = gridSummary(c.grid);
-  return s ? { value: c.value, share: `${c.share}%`, busiestHours: s.busiestHours || '–', busiestDay: s.busiestDay, outOfHours: `${s.outOfHours ?? 0}%` } : null;
+  return s ? { value: c.value, share: `${c.share}%`, busiestHours: s.busiestHours || '–', busiestDay: s.busiestDay, outOfHours: `${s.outOfHours ?? 0}%`, grid: c.grid } : null;
 }).filter(Boolean);
 
 export const PDF_ISSUES = 25; // issues in the table
