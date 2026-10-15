@@ -14,6 +14,7 @@ import { snapshotFrom } from './publish.js';
 import { crewRates, headcountFor } from './headcount.js';
 import * as storage from './storage.js';
 import { checkOrganisation, isCheckDue } from './alerts.js';
+import { isEmailDue, lastSlot } from './email.js';
 
 const { deleteAlert, listAlerts, listLiveConfigs, loadAlertState, loadLiveConfig, loadLiveState, loadSettings, saveAlertState, saveReport, updateLiveState } = storage;
 const ALERT_DAYS_KEPT = 30;
@@ -108,6 +109,7 @@ export const scheduler = async () => {
   }
   console.log(`live: scheduler checked ${configs.length}, queued ${queued}`);
   await scheduleAlerts();
+  await scheduleEmails();
   const cleaned = await storage.scrubAccountIds();
   if (cleaned) console.log(`privacy: removed account ids from ${cleaned} stored items`);
 };
@@ -137,7 +139,32 @@ async function scheduleAlerts() {
   console.log(`alerts: scheduler queued ${queued}, removed ${old.length} old`);
 }
 
+/** Queues an email report (the scheduler, "Send now" or a test). */
+export async function queueEmail(scheduleId, { reason = 'schedule', slot = null, overrideTo = null } = {}) {
+  await (await queue()).push({ body: { type: 'email', scheduleId: String(scheduleId), reason, slot, overrideTo } });
+  await storage.updateScheduleState(scheduleId, { queuedAt: new Date().toISOString(), queuedSlot: slot });
+}
+
+/** Queues email schedules whose latest slot hasn't been sent. */
+async function scheduleEmails() {
+  const schedules = await storage.loadSchedules();
+  let queued = 0;
+  const now = new Date();
+  for (const schedule of schedules) {
+    const state = await storage.loadScheduleState(schedule.id);
+    if (!isEmailDue(schedule, state, now)) continue;
+    await queueEmail(schedule.id, { slot: lastSlot(schedule, now) });
+    queued += 1;
+  }
+  if (schedules.length) console.log(`email: scheduler checked ${schedules.length}, queued ${queued}`);
+}
+
 export const consumer = async (event) => {
+  if (event?.body?.type === 'email') {
+    const { sendSchedule } = await import('./emailJobs.js');
+    await sendSchedule(event.body.scheduleId, { reason: event.body.reason, slot: event.body.slot, overrideTo: event.body.overrideTo });
+    return;
+  }
   const orgId = event?.body?.orgId;
   if (!/^\d{1,18}$/.test(String(orgId))) return;
   if (event?.body?.type === 'alerts') await checkOrganisation(orgId, storage);

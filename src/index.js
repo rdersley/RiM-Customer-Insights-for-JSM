@@ -13,13 +13,15 @@ import { deleteLive, deleteReport, listAlerts, listOrgLogos, loadAlert, loadLive
 import { MAX_ORG_LOGOS, sanitizeLogo } from './logos.js';
 import { headcountFor, orgsOf } from './headcount.js';
 import { isLive, liveConfigFrom } from './live.js';
-import { queueAlertCheck, queueRefresh } from './liveJobs.js';
+import { queueAlertCheck, queueEmail, queueRefresh } from './liveJobs.js';
 import { allClientFields, analysisConfig, autoInternalBreakdowns, organisationBreakdown, sanitizeSettings, selectableFields } from './settings.js';
 import { problemFields, problemRequest, relatesLinkType } from './problem.js';
 import { slaFieldChoices, slaState } from './sla.js';
 import { deviceIdChoices, deviceOf } from './devices.js';
 import { escalationOf, escalationSummary, levelOf } from './escalation.js';
 import { channelOf } from './channels.js';
+import { emailList, MAX_SCHEDULES, sanitizeEmailConfig, sanitizeSchedule } from './email.js';
+import { loadEmailConfig, loadEmailLog, loadEmailSecret, loadSchedules, loadScheduleState, saveEmailConfig, saveEmailSecret, saveSchedules } from './storage.js';
 import { searchWords } from './surge.js';
 
 // This package is "type": "module"; Forge's bundler then hands CommonJS packages
@@ -438,6 +440,60 @@ async function fetchHistories(issues, fieldIds, deadline) {
   for (const [id, list] of histories) histories.set(id, [...new Map(list.map((h, n) => [h.id ?? `i${n}`, h])).values()]);
   return { histories, complete };
 }
+
+// ---- Email reports (src/email.js, emailJobs.js): Jira admins only -----------------
+
+async function requireEmailAdmin(context) {
+  if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
+  if (!(await isJiraAdmin())) throw new Error('Only Jira admins can manage email reports.');
+}
+
+define('getEmailSettings', async ({ context }) => {
+  await requireEmailAdmin(context);
+  const [config, secret, schedules, log] = await Promise.all([loadEmailConfig(), loadEmailSecret(), loadSchedules(), loadEmailLog()]);
+  const states = await Promise.all(schedules.map((s) => loadScheduleState(s.id)));
+  // The secret itself never leaves the server: only whether one is set.
+  return { config, secretSet: Boolean(secret), schedules: schedules.map((s, i) => ({ ...s, state: states[i] })), log };
+});
+
+// payload: { config: { tenantId, clientId, sender }, secret?: new client secret }
+define('saveEmailConfig', async ({ payload, context }) => {
+  await requireEmailAdmin(context);
+  const config = sanitizeEmailConfig(payload?.config);
+  await saveEmailConfig(config);
+  const secret = String(payload?.secret ?? '').trim();
+  if (secret) await saveEmailSecret(secret.slice(0, 500));
+  console.log(`saveEmailConfig: tenant ${config.tenantId ? 'set' : 'missing'}, client ${config.clientId ? 'set' : 'missing'}, sender ${config.sender ? 'set' : 'missing'}${secret ? ', secret replaced' : ''}`);
+  return { config, secretSet: Boolean(secret) || Boolean(await loadEmailSecret()) };
+});
+
+define('saveSchedule', async ({ payload, context }) => {
+  await requireEmailAdmin(context);
+  const schedule = sanitizeSchedule(payload?.schedule, await listOrganizations());
+  const schedules = await loadSchedules();
+  const rest = schedules.filter((s) => s.id !== schedule.id);
+  if (rest.length >= MAX_SCHEDULES) throw new Error(`Up to ${MAX_SCHEDULES} schedules.`);
+  await saveSchedules([...rest, schedule].sort((a, b) => a.name.localeCompare(b.name)));
+  console.log(`saveSchedule: ${schedule.frequency}, ${schedule.organizations.length} orgs, ${schedule.internal.length + schedule.customers.length} recipients`);
+  return { schedule };
+});
+
+define('deleteSchedule', async ({ payload, context }) => {
+  await requireEmailAdmin(context);
+  await saveSchedules((await loadSchedules()).filter((s) => s.id !== String(payload?.id ?? '')));
+  return { deleted: true };
+});
+
+// "Send now" to the schedule's recipients, or a test to one address only.
+define('sendScheduleNow', async ({ payload, context }) => {
+  await requireEmailAdmin(context);
+  const id = String(payload?.id ?? '');
+  if (!(await loadSchedules()).some((s) => s.id === id)) throw new Error('That schedule wasn’t found. Save it first.');
+  const [to] = payload?.testTo ? emailList(payload.testTo) : [];
+  if (payload?.testTo && !to) throw new Error('Enter a valid email address for the test.');
+  await queueEmail(id, { reason: to ? 'test' : 'manual', overrideTo: to || null });
+  return { queued: true };
+});
 
 // Internal analysis pickers: projects this user can see, and client values.
 define('getProjects', async ({ context }) => {
