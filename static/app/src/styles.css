@@ -196,3 +196,7 @@
 
 /* Escalation levels */
 .ci-escalation .ci-num { text-align: right; white-space: nowrap; }
+
+/* Contact channel buttons above the heatmap */
+.ci-channels { margin-bottom: var(--nq-space-100); }
+.ci-channels p { margin: var(--nq-space-075, 6px) 0 0; }

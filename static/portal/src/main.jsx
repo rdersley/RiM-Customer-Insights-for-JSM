@@ -12,6 +12,7 @@ import { duration, sparkPath, trendWord } from '../../../src/trend.js';
 import { DAYS, hoursOf, peakWindow, windowText } from '../../../src/timeOfDay.js';
 import { version } from '../../../package.json';
 import CrewRates from '../../app/src/CrewRates.jsx';
+import ChannelPicker, { useChannel } from '../../app/src/ChannelPicker.jsx';
 import './styles.css';
 
 enableTheme(view);
@@ -77,13 +78,16 @@ function TimeHeatmap({ grid }) {
 }
 
 function WhenRequestsArrive({ timeOfDay }) {
-  const { grid, timeZone } = timeOfDay;
+  const channel = useChannel(timeOfDay);
+  const { timeZone } = timeOfDay;
+  const grid = channel.grid;
   const total = grid.flat().reduce((a, n) => a + n, 0);
   if (!total) return null;
   const peak = peakWindow(hoursOf(grid));
   const dayTotals = grid.map((row) => row.reduce((a, n) => a + n, 0));
   const busiest = dayTotals.indexOf(Math.max(...dayTotals));
   return <Card title="When your requests arrive" description={`Times in ${timeZone}.`}>
+    <ChannelPicker timeOfDay={timeOfDay} channel={channel} noun="requests" />
     <div className="nq-kpis cp-when">
       {peak && <Kpi icon="◷" label="Busiest hours" value={windowText(peak)} hint={`${peak.share}% of requests`} />}
       <Kpi icon="▦" label="Busiest day" value={DAYS[busiest]} hint={`${Math.round((dayTotals[busiest] / total) * 100)}% of requests`} />

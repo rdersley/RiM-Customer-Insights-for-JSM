@@ -1,6 +1,7 @@
 import { gridOf, hoursOf, validTimeZone } from './timeOfDay.js';
 import { addTallies, slaSummary, slaTally } from './sla.js';
 import { addDevices, devicesAffected } from './devices.js';
+import { channelGrids } from './channels.js';
 
 const STOP = new Set(`about above after again against all also am an and any are as at be because been before being below between both but by can could did do does doing down during each few for from further had has have having he her here hers herself him himself his how i if in into is it its itself just me more most my myself no nor not of off on once only or other our ours ourselves out over own same she should so some such than that the their theirs them themselves then there these they this those through to too under until up very was we were what when where which while who whom why with would you your yours a au aux avec ces dans de des du elle en est et eux il je la le les leur lui ma mais mes moi mon ne nos notre nous on ou par pas pour qu que quel quelle quels qui sa sans se ses son sur ta te tes toi ton tu un une vos votre vous c est d l j n s m`.split(/\s+/));
 
@@ -563,7 +564,7 @@ export const PERIOD_LIMIT = 900;
 const loggedSeconds = (issues) => issues.reduce((n, issue) => n + (Number(issue.fields?.timespent) > 0 ? Number(issue.fields.timespent) : 0), 0);
 const hoursRounded = (seconds) => Math.round((seconds / 3600) * 10) / 10;
 
-export function buildReport(issues, periodStart, periodEnd, totals = null, { limit = PERIOD_LIMIT, breakdowns = [], minPatternSize = 2, placeholders = [], synonyms = [], timeZone: zone = 'UTC', slaFields = [], devices = null } = {}) {
+export function buildReport(issues, periodStart, periodEnd, totals = null, { limit = PERIOD_LIMIT, breakdowns = [], minPatternSize = 2, placeholders = [], synonyms = [], timeZone: zone = 'UTC', slaFields = [], devices = null, channelField = null } = {}) {
   // Devices affected: only when an admin chose a device ID field.
   const deviceConfig = devices?.idFieldId ? devices : null;
   const timeZone = validTimeZone(zone);
@@ -631,7 +632,9 @@ export function buildReport(issues, periodStart, periodEnd, totals = null, { lim
     bucketSamples,
     // When tickets are created, in `timeZone`. Counts are of analysed tickets
     // (a sample for large organisations), so the page shows shares.
-    timeOfDay: { timeZone, grid: gridOf(current, timeZone), analysed: current.length, estimated: currentScale > 1 },
+    // byChannel: the same heatmap per contact channel (e.g. Phone, Email), when an admin chose the field.
+    timeOfDay: { timeZone, grid: gridOf(current, timeZone), analysed: current.length, estimated: currentScale > 1, ...(channelField ? { channelField: channelField.name, byChannel: channelGrids(current, channelField, timeZone) } : {}) },
+    channelField,
     // Logged work across the period, and the share of analysed tickets that have any.
     effort: {
       loggedHours: hoursRounded(loggedSeconds(current) * currentScale),

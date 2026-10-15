@@ -4,6 +4,13 @@
 import { median, patternTrend, topShares } from './analysis.js';
 import { duration, trendWord } from './trend.js';
 import { DAYS, hoursOf, outOfHoursShare, peakWindow, windowText } from './timeOfDay.js';
+import { gridSummary } from './channels.js';
+
+/** Per contact channel rows for the PDF: share, busiest hours and day, out of hours. */
+const channelRows = (byChannel) => (Array.isArray(byChannel) ? byChannel : []).map((c) => {
+  const s = gridSummary(c.grid);
+  return s ? { value: c.value, share: `${c.share}%`, busiestHours: s.busiestHours || '–', busiestDay: s.busiestDay, outOfHours: `${s.outOfHours ?? 0}%` } : null;
+}).filter(Boolean);
 
 export const PDF_ISSUES = 25; // issues in the table
 export const PDF_DETAILS = 10; // issues with example tickets
@@ -102,6 +109,8 @@ export function pdfContent({ report, groups = report?.groups || [], ai = null, g
       busiestHours: peakText(hoursOf(grid)),
       busiestDay: DAYS[totals.indexOf(Math.max(...totals))],
       outOfHours: `${outOfHoursShare(grid)}%`,
+      channelField: report.timeOfDay.channelField || '',
+      channels: channelRows(report.timeOfDay.byChannel),
     };
   }
 
@@ -176,7 +185,7 @@ export function portalPdfContent(snapshot, { generatedAt = new Date() } = {}) {
   const grid = snapshot.timeOfDay?.grid;
   if (grid && grid.some((row) => row.some(Boolean))) {
     const days = grid.map((row) => row.reduce((a, c) => a + c, 0));
-    timeOfDay = { timeZone: snapshot.timeOfDay.timeZone, grid, busiestHours: peakText(hoursOf(grid)), busiestDay: DAYS[days.indexOf(Math.max(...days))], outOfHours: `${outOfHoursShare(grid)}%` };
+    timeOfDay = { timeZone: snapshot.timeOfDay.timeZone, grid, busiestHours: peakText(hoursOf(grid)), busiestDay: DAYS[days.indexOf(Math.max(...days))], outOfHours: `${outOfHoursShare(grid)}%`, channelField: snapshot.timeOfDay.channelField || '', channels: channelRows(snapshot.timeOfDay.byChannel) };
   }
 
   return {
