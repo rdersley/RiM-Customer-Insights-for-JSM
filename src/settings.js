@@ -4,6 +4,7 @@
 
 import { sanitizeHeadcounts } from './headcount.js';
 import { DEFAULT_SURGE, sanitizeSurge } from './surge.js';
+import { DEFAULT_HEALTH, sanitizeHealth } from './health.js';
 import { slaFieldList } from './sla.js';
 import { DEFAULT_DEVICES, sanitizeDevices } from './devices.js';
 import { sanitizeEscalation } from './escalation.js';
@@ -48,7 +49,7 @@ export const DEFAULT_ALERTS = {
   issueTypeName: 'Task',
   issueTypeId: '',
 };
-export const DEFAULT_SETTINGS = { breakdowns: [], internalBreakdowns: [], projectProfiles: [], channelField: null, devices: DEFAULT_DEVICES, handlingStatuses: [], slaFields: [], internalPatterns: { minPatternSize: MIN_PATTERN.default, synonyms: DEFAULT_INTERNAL_SYNONYMS, placeholders: DEFAULT_PLACEHOLDERS }, clientFields: [], headcounts: [], portalEnabled: false, minPatternSize: MIN_PATTERN.default, placeholders: DEFAULT_PLACEHOLDERS, synonyms: DEFAULT_SYNONYMS, alerts: DEFAULT_ALERTS, surge: DEFAULT_SURGE };
+export const DEFAULT_SETTINGS = { breakdowns: [], internalBreakdowns: [], projectProfiles: [], channelField: null, devices: DEFAULT_DEVICES, handlingStatuses: [], slaFields: [], internalPatterns: { minPatternSize: MIN_PATTERN.default, synonyms: DEFAULT_INTERNAL_SYNONYMS, placeholders: DEFAULT_PLACEHOLDERS }, clientFields: [], headcounts: [], portalEnabled: false, minPatternSize: MIN_PATTERN.default, placeholders: DEFAULT_PLACEHOLDERS, synonyms: DEFAULT_SYNONYMS, alerts: DEFAULT_ALERTS, surge: DEFAULT_SURGE, health: DEFAULT_HEALTH };
 
 const whole = (value, { min, max, default: fallback }) => {
   const n = Number(value);
@@ -250,7 +251,7 @@ export function sanitizeSettings(input, selectable, organizations = [], { slaCho
   // Statuses that count as handling time (AHT); empty means "in progress" ones that aren't waiting.
   const handlingStatuses = [...new Set((Array.isArray(input?.handlingStatuses) ? input.handlingStatuses : String(input?.handlingStatuses ?? '').split(/[\n,]/))
     .map((n) => clip(n, 60)).filter(Boolean))].slice(0, 30);
-  return { breakdowns, internalBreakdowns, internalPatterns, projectProfiles, handlingStatuses, channelField: sanitizeChannelField(input?.channelField, selectable), devices: sanitizeDevices(input?.devices, { idChoices, selectable }), slaFields: slaFieldList(input?.slaFields, slaChoices), clientFields: clientFieldList(input?.clientFields, selectable), headcounts: sanitizeHeadcounts(input?.headcounts, organizations, breakdowns), portalEnabled: input?.portalEnabled === true, minPatternSize: patternMinimum(input?.minPatternSize), placeholders: placeholderList(input?.placeholders), synonyms: synonymList(input?.synonyms), alerts: sanitizeAlerts(input?.alerts, organizations), surge: sanitizeSurge(input?.surge, organizations, breakdowns, selectable) };
+  return { breakdowns, internalBreakdowns, internalPatterns, projectProfiles, handlingStatuses, channelField: sanitizeChannelField(input?.channelField, selectable), devices: sanitizeDevices(input?.devices, { idChoices, selectable }), slaFields: slaFieldList(input?.slaFields, slaChoices), clientFields: clientFieldList(input?.clientFields, selectable), headcounts: sanitizeHeadcounts(input?.headcounts, organizations, breakdowns), portalEnabled: input?.portalEnabled === true, minPatternSize: patternMinimum(input?.minPatternSize), placeholders: placeholderList(input?.placeholders), synonyms: synonymList(input?.synonyms), alerts: sanitizeAlerts(input?.alerts, organizations), surge: sanitizeSurge(input?.surge, organizations, breakdowns, selectable), health: sanitizeHealth(input?.health, organizations) };
 }
 
 const quote = (v) => `"${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;

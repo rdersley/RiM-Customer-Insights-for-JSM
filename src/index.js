@@ -1,7 +1,7 @@
 import ResolverModule from '@forge/resolver';
 import { asUser, route } from '@forge/api';
 import { textOf } from './analysis.js';
-import { countIssues, dateSlices, deviceFieldIds, filterFor, organisationsOf, parseQuery, pool, readJson, requestWithRetry, runAnalysis, searchPage } from './engine.js';
+import { countIssues, dateSlices, deviceFieldIds, filterFor, organisationsOf, parseQuery, pool, readJson, requestWithRetry, runAnalysis, satisfactionField, searchPage } from './engine.js';
 import { agentRows, handlingTimes, satisfactionFieldId, teamTotals } from './agents.js';
 import { chartBuckets } from './analysis.js';
 import { AGE_BANDS, backlogAges, flowSummary, forecast, pastWeeks } from './flow.js';
@@ -9,11 +9,12 @@ import { licenseAllows, UNLICENSED_MESSAGE } from './license.js';
 import { exportBackupPage, importBackupBatch } from './backup.js';
 import { suggestCategories, suggestMerges, summarise } from './ai.js';
 import { snapshotFrom } from './publish.js';
-import { deleteLive, deleteReport, listAlerts, listOrgLogos, loadAlert, loadLiveConfig, loadLiveState, loadLogo, loadReport, loadSettings, saveAlert, saveLiveConfig, saveLogo, saveReport, saveSettings } from './storage.js';
+import { deleteLive, deleteReport, listAlerts, listHealth, listOrgLogos, loadAlert, loadLiveConfig, loadLiveState, loadLogo, loadReport, loadSettings, saveAlert, saveLiveConfig, saveLogo, saveReport, saveSettings } from './storage.js';
 import { MAX_ORG_LOGOS, sanitizeLogo } from './logos.js';
 import { headcountFor, orgsOf } from './headcount.js';
 import { isLive, liveConfigFrom } from './live.js';
-import { queueAlertCheck, queueEmail, queueRefresh } from './liveJobs.js';
+import { queueAlertCheck, queueEmail, queueHealth, queueRefresh } from './liveJobs.js';
+import { changeOver } from './health.js';
 import { allClientFields, analysisConfig, autoInternalBreakdowns, organisationBreakdown, sanitizeSettings, selectableFields } from './settings.js';
 import { problemFields, problemRequest, relatesLinkType } from './problem.js';
 import { slaFieldChoices, slaState } from './sla.js';
@@ -74,6 +75,40 @@ define('getAlerts', async ({ context }) => {
   const [visible, alerts] = await Promise.all([listOrganizations(), listAlerts()]);
   const ids = new Set(visible.map((o) => o.id));
   return { enabled: true, alerts: alerts.filter((a) => !a.dismissedAt && ids.has(a.organization.id)).slice(0, ALERTS_SHOWN) };
+});
+
+// Customer health list (healthJobs.js): the latest score for each listed
+// organisation the agent can see, worst first, with the change over 7 days.
+define('getHealthBoard', async ({ context }) => {
+  if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
+  const { health } = await loadSettings();
+  if (!health?.enabled) return { enabled: false, rows: [] };
+  const [visible, records, admin] = await Promise.all([listOrganizations(), listHealth(), isJiraAdmin()]);
+  const ids = new Set(visible.map((o) => o.id));
+  const byOrg = new Map(records.map((r) => [String(r.organization?.id), r]));
+  const rows = health.organizations.filter((o) => ids.has(o.id)).map((organization) => {
+    const r = byOrg.get(organization.id) || {};
+    return {
+      organization,
+      score: r.score ?? null, band: r.band || null, kind: r.kind || null, weakest: r.weakest || null,
+      signals: r.signals || [], tickets: r.tickets ?? null, previousTickets: r.previousTickets ?? null,
+      period: r.period || null, updatedAt: r.updatedAt || null, queuedAt: r.queuedAt || null, lastError: r.lastError || null,
+      change: changeOver(r.history, 7),
+      history: (r.history || []).slice(-30),
+    };
+  });
+  return { enabled: true, rows, canRefresh: admin, hidden: health.organizations.length - rows.length };
+});
+
+// Health list: work out every listed organisation's score now. Jira admins only.
+define('refreshHealth', async ({ context }) => {
+  if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
+  if (!(await isJiraAdmin())) throw new Error('Only Jira admins can refresh the health list.');
+  const { health } = await loadSettings();
+  if (!health?.enabled || !health.organizations.length) throw new Error('Turn on customer health and save at least one organisation first.');
+  for (const organization of health.organizations) await queueHealth(organization.id);
+  console.log(`refreshHealth: queued ${health.organizations.length}`);
+  return { queued: health.organizations.length };
 });
 
 // Settings page: run the check for every watched organisation now. Jira admins only.
@@ -176,7 +211,8 @@ define('analyze', async ({ payload, context }) => {
   const breakdowns = await breakdownsFor(payload, settings);
   const query = parseQuery(payload, filterFor(payload?.filter, breakdowns), { clientFields: allClientFields(settings) });
   // Resolvers are killed at 25s; runAnalysis stops starting new fetches after the budget.
-  const report = await runAnalysis(query, { breakdowns, minPatternSize, placeholders, synonyms, slaFields: config.slaFields, devices: settings.devices, channelField: settings.channelField || null, mode: 'user', budgetMs: FETCH_BUDGET_MS });
+  const satisfactionId = await satisfactionField('user');
+  const report = await runAnalysis(query, { breakdowns, minPatternSize, placeholders, synonyms, slaFields: config.slaFields, devices: settings.devices, channelField: settings.channelField || null, satisfactionId, mode: 'user', budgetMs: FETCH_BUDGET_MS });
   return { ...report, settingsUsed: payload?.scope === 'internal' ? { profile: config.profile, mixed: Boolean(config.mixed) } : null };
 });
 
@@ -750,7 +786,7 @@ define('saveSettings', async ({ payload, context }) => {
   if (settings.surge.enabled && settings.surge.createIssue) settings.surge.issueTypeId = await alertIssueType(settings.surge);
   await saveSettings(settings);
   const { alerts } = settings;
-  console.log(`saveSettings: ${settings.breakdowns.length} breakdowns, ${settings.internalBreakdowns.length} internal breakdowns, ${settings.projectProfiles.length} project settings, ${settings.slaFields.length} SLAs, ${settings.clientFields.length} client fields, ${settings.headcounts.length} crew lists, surge ${settings.surge.enabled ? `on (${settings.surge.organizations.length} orgs, tickets ${settings.surge.createIssue ? settings.surge.projectKey : 'off'})` : 'off'}, portal ${settings.portalEnabled ? 'on' : 'off'}, alerts ${alerts.enabled ? `on (${alerts.organizations.length} orgs, tickets ${alerts.createIssue ? alerts.projectKey : 'off'})` : 'off'}`);
+  console.log(`saveSettings: ${settings.breakdowns.length} breakdowns, ${settings.internalBreakdowns.length} internal breakdowns, ${settings.projectProfiles.length} project settings, ${settings.slaFields.length} SLAs, ${settings.clientFields.length} client fields, ${settings.headcounts.length} crew lists, surge ${settings.surge.enabled ? `on (${settings.surge.organizations.length} orgs, tickets ${settings.surge.createIssue ? settings.surge.projectKey : 'off'})` : 'off'}, health ${settings.health.enabled ? `on (${settings.health.organizations.length} orgs)` : "off"}, portal ${settings.portalEnabled ? 'on' : 'off'}, alerts ${alerts.enabled ? `on (${alerts.organizations.length} orgs, tickets ${alerts.createIssue ? alerts.projectKey : 'off'})` : 'off'}`);
   return settings;
 });
 

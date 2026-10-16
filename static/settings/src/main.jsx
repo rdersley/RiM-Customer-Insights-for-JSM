@@ -17,6 +17,7 @@ import DeviceSettings from './DeviceSettings.jsx';
 import EmailReports from './EmailReports.jsx';
 import CrewNumbers from './CrewNumbers.jsx';
 import SurgeSettings from './SurgeSettings.jsx';
+import HealthSettings from './HealthSettings.jsx';
 import PdfLogos from './PdfLogos.jsx';
 import rimLogo from './assets/rim-logo.png';
 import './styles.css';
@@ -161,6 +162,9 @@ function App() {
 
       <SurgeSettings value={draft.surge} organizations={state.organizations || []} breakdowns={state.settings.breakdowns} fields={state.fields || []}
         onChange={(surge) => { setSaved(false); setDraft((d) => ({ ...d, surge })); }} />
+
+      <HealthSettings value={draft.health} organizations={state.organizations || []} canRefresh={!dirty && Boolean(state.settings?.health?.enabled)}
+        onChange={(health) => { setSaved(false); setDraft((d) => ({ ...d, health })); }} />
 
       <Card title="Customer portal" description="Let Jira admins and project admins publish reviewed reports that customers see under “Service report” in the portal.">
         <label className="cs-check">

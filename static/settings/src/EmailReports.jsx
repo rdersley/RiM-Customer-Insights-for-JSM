@@ -68,7 +68,7 @@ function ScheduleForm({ value, organizations, onSave, onCancel, saving }) {
       <Field label="Internal recipients" htmlFor="cs-em-int" help="Staff, separated by commas. Copied in when there are customer recipients.">
         <textarea id="cs-em-int" className="nq-textarea" rows={2} value={s.internal} onChange={(e) => set({ internal: e.target.value })} placeholder="name@retailinmotion.com" />
       </Field>
-      <Field label="Customer recipients" htmlFor="cs-em-cust" help="The customer's contacts, separated by commas.">
+      <Field label="Customer recipients" htmlFor="cs-em-cust" help="The customer's contacts, separated by commas. Leave empty for an internal-only report: those also include the customer health score.">
         <textarea id="cs-em-cust" className="nq-textarea" rows={2} value={s.customers} onChange={(e) => set({ customers: e.target.value })} />
       </Field>
     </div>

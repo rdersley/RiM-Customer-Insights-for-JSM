@@ -15,6 +15,7 @@ import { crewRates, headcountFor } from './headcount.js';
 import * as storage from './storage.js';
 import { checkOrganisation, isCheckDue } from './alerts.js';
 import { isEmailDue, lastSlot } from './email.js';
+import { isHealthDue } from './healthJobs.js';
 
 const { deleteAlert, listAlerts, listLiveConfigs, loadAlertState, loadLiveConfig, loadLiveState, loadSettings, saveAlertState, saveReport, updateLiveState } = storage;
 const ALERT_DAYS_KEPT = 30;
@@ -110,6 +111,7 @@ export const scheduler = async () => {
   console.log(`live: scheduler checked ${configs.length}, queued ${queued}`);
   await scheduleAlerts();
   await scheduleEmails();
+  await scheduleHealth();
   const cleaned = await storage.scrubAccountIds();
   if (cleaned) console.log(`privacy: removed account ids from ${cleaned} stored items`);
 };
@@ -159,6 +161,31 @@ async function scheduleEmails() {
   if (schedules.length) console.log(`email: scheduler checked ${schedules.length}, queued ${queued}`);
 }
 
+/** Queues one organisation's health score (the scheduler, or "Refresh now"). */
+export async function queueHealth(orgId) {
+  await (await queue()).push({ body: { type: 'health', orgId: String(orgId) } });
+  const record = await storage.loadHealth(orgId);
+  if (record) await storage.saveHealth({ ...record, queuedAt: new Date().toISOString() });
+}
+
+/** Queues today's health scores for the organisations on the list, and drops records for ones taken off it. */
+async function scheduleHealth() {
+  const { health } = await loadSettings();
+  const listed = new Set((health?.organizations || []).map((o) => o.id));
+  const records = await storage.listHealth();
+  for (const r of records) if (!listed.has(String(r.organization?.id))) await storage.deleteHealth(r.organization.id);
+  if (!health?.enabled) return;
+  const byOrg = new Map(records.map((r) => [String(r.organization?.id), r]));
+  let queued = 0;
+  for (const organization of health.organizations) {
+    if (!isHealthDue(byOrg.get(organization.id))) continue;
+    await (await queue()).push({ body: { type: 'health', orgId: organization.id } });
+    await storage.saveHealth({ history: [], ...byOrg.get(organization.id), organization, queuedAt: new Date().toISOString() });
+    queued += 1;
+  }
+  if (queued) console.log(`health: scheduler queued ${queued} of ${health.organizations.length}`);
+}
+
 export const consumer = async (event) => {
   if (event?.body?.type === 'email') {
     const { sendSchedule } = await import('./emailJobs.js');
@@ -167,6 +194,11 @@ export const consumer = async (event) => {
   }
   const orgId = event?.body?.orgId;
   if (!/^\d{1,18}$/.test(String(orgId))) return;
+  if (event?.body?.type === 'health') {
+    const { checkHealth } = await import('./healthJobs.js');
+    await checkHealth(orgId);
+    return;
+  }
   if (event?.body?.type === 'alerts') await checkOrganisation(orgId, storage);
   else await refreshLiveReport(orgId);
 };

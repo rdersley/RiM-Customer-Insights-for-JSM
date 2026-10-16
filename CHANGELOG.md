@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.22.0 (2026-10-16)
+
+- **Customer health score:** a 0–100 score (Healthy 75+, Watch 50–74, At risk under 50) from five signals, each scored 0–100 and weighted: ticket volume against the previous period (20%), share of tickets in rising or new issues (20%), SLAs met (25%), open tickets over 30 days old (20%) and customer satisfaction (15%). Signals without enough data are left out and the rest weighted up. Internal only: never on the portal or sent to customers.
+- **On every customer report:** a Customer health card with the score, each signal's detail and score, and the weakest signal. "Include in PDF" (on by default) adds it to the Export PDF.
+- **All-customers list:** Settings → Customers → Customer health. Choose up to 50 organisations; each is scored once a day (from 05:00 UTC) over the last 30 days, as the app. The Customer Insights page lists them worst first with the 7-day change, a 30-day trend line, the weakest signal and Analyse. Agents only see organisations they can see. Admins can Refresh now.
+- **Email reports:** schedules with no customer recipients (internal only), and test sends, include the health score in the PDF.
+- Reports now read the satisfaction (CSAT) rating with the tickets, for the score.
+
 ## 1.21.1 (2026-10-15)
 
 - **Retail inMotion logo:** shown as the app's icon in the Jira sidebar and in place of the letter tile in the header of the Customer Insights page and its settings. (The customer portal keeps its own branding.)
