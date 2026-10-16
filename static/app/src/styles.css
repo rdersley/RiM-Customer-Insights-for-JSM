@@ -204,3 +204,24 @@
 /* The Retail inMotion logo in the header, in place of the kit's letter tile. */
 .nq-header .nq-mark:has(.ci-logo) { background: none; box-shadow: none; padding: 0; overflow: visible; }
 .ci-logo { display: block; width: 100%; height: 100%; object-fit: contain; }
+
+/* Customer health */
+.ci-health { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: var(--nq-space-200); align-items: start; }
+.ci-health__score { display: grid; justify-items: center; gap: var(--nq-space-050); padding: var(--nq-space-200) var(--nq-space-100); border-radius: var(--nq-radius-md, 6px); background: var(--nq-bg-neutral); }
+.ci-health__score strong { font-size: 40px; line-height: 1; }
+.ci-health__score span { font-weight: 600; }
+.ci-health__score--success { background: var(--nq-bg-success-subtler); color: var(--nq-text-success); }
+.ci-health__score--warning { background: var(--nq-bg-warning-subtler); color: var(--nq-text-warning); }
+.ci-health__score--danger { background: var(--nq-bg-danger-subtler); color: var(--nq-text-danger); }
+.ci-health__signals .ci-num, .ci-health__board .ci-num { text-align: right; white-space: nowrap; }
+.ci-health__cell { display: inline-flex; gap: var(--nq-space-100); align-items: center; justify-content: flex-end; }
+.ci-health__meter { display: inline-block; width: 60px; height: 6px; background: var(--nq-bg-neutral); border-radius: var(--nq-radius-sm); overflow: hidden; }
+.ci-health__meter i { display: block; height: 100%; background: var(--nq-bg-brand); }
+.ci-health__meter--success i { background: var(--nq-bg-success-bold); }
+.ci-health__meter--warning i { background: var(--nq-bg-warning-bold); }
+.ci-health__meter--danger i { background: var(--nq-bg-danger-bold); }
+.ci-health__pdf { display: inline-flex; align-items: center; gap: var(--nq-space-100); white-space: nowrap; }
+.ci-health__board .ci-spark { width: 80px; }
+.ci-up { color: var(--nq-text-success); }
+.ci-down { color: var(--nq-text-danger); }
+@media (max-width: 700px) { .ci-health { grid-template-columns: minmax(0, 1fr); } }

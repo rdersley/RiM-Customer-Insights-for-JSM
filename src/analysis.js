@@ -2,6 +2,7 @@ import { gridOf, hoursOf, validTimeZone } from './timeOfDay.js';
 import { addTallies, slaSummary, slaTally } from './sla.js';
 import { addDevices, devicesAffected } from './devices.js';
 import { channelGrids } from './channels.js';
+import { satisfactionOf } from './health.js';
 
 const STOP = new Set(`about above after again against all also am an and any are as at be because been before being below between both but by can could did do does doing down during each few for from further had has have having he her here hers herself him himself his how i if in into is it its itself just me more most my myself no nor not of off on once only or other our ours ourselves out over own same she should so some such than that the their theirs them themselves then there these they this those through to too under until up very was we were what when where which while who whom why with would you your yours a au aux avec ces dans de des du elle en est et eux il je la le les leur lui ma mais mes moi mon ne nos notre nous on ou par pas pour qu que quel quelle quels qui sa sans se ses son sur ta te tes toi ton tu un une vos votre vous c est d l j n s m`.split(/\s+/));
 
@@ -564,7 +565,7 @@ export const PERIOD_LIMIT = 900;
 const loggedSeconds = (issues) => issues.reduce((n, issue) => n + (Number(issue.fields?.timespent) > 0 ? Number(issue.fields.timespent) : 0), 0);
 const hoursRounded = (seconds) => Math.round((seconds / 3600) * 10) / 10;
 
-export function buildReport(issues, periodStart, periodEnd, totals = null, { limit = PERIOD_LIMIT, breakdowns = [], minPatternSize = 2, placeholders = [], synonyms = [], timeZone: zone = 'UTC', slaFields = [], devices = null, channelField = null } = {}) {
+export function buildReport(issues, periodStart, periodEnd, totals = null, { limit = PERIOD_LIMIT, breakdowns = [], minPatternSize = 2, placeholders = [], synonyms = [], timeZone: zone = 'UTC', slaFields = [], devices = null, channelField = null, satisfactionId = null } = {}) {
   // Devices affected: only when an admin chose a device ID field.
   const deviceConfig = devices?.idFieldId ? devices : null;
   const timeZone = validTimeZone(zone);
@@ -645,6 +646,8 @@ export function buildReport(issues, periodStart, periodEnd, totals = null, { lim
     // The admin's SLA fields and how the period did against each.
     slaFields,
     sla: slaSummary(current, slaFields, currentScale),
+    // Customer satisfaction ratings on the period's tickets (for the health score).
+    satisfaction: satisfactionOf(current, satisfactionId),
     devices: deviceConfig ? devicesAffected(current, deviceConfig) : null,
     deviceConfig: deviceConfig ? { idFieldId: deviceConfig.idFieldId, types: deviceConfig.types, p1Percent: deviceConfig.p1Percent, p2Percent: deviceConfig.p2Percent } : null,
     dataQuality: buildDataQuality(breakdowns, current, currentScale, placeholders),

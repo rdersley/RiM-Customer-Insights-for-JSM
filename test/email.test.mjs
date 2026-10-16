@@ -111,4 +111,6 @@ test('a scheduled send builds the PDF and mails it through Microsoft 365', async
   await sendSchedule(schedule.id, { reason: 'test', overrideTo: 'me@retailinmotion.com', now: new Date('2026-10-12T07:30:00Z') });
   assert.deepEqual(sent[1].body.message.toRecipients.map((r) => r.emailAddress.address), ['me@retailinmotion.com']);
   assert.deepEqual(sent[1].body.message.ccRecipients, []);
+  // Only internal-only sends (like this test) carry the health score, so the PDF is larger.
+  assert.ok(sent[1].body.message.attachments[0].contentBytes.length > sent[0].body.message.attachments[0].contentBytes.length);
 });

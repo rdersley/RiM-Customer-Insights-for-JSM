@@ -35,7 +35,22 @@ export function resolutionLine({ medianHours, openShare } = {}) {
  * The report as PDF sections. `groups` are the patterns as shown (AI-merged
  * after "Summarise with AI"); `ai` is the AI summary, if any.
  */
-export function pdfContent({ report, groups = report?.groups || [], ai = null, generatedAt = new Date(), filter = null, crew = null }) {
+/**
+ * The health score (health.js healthOf) as a PDF section, or null. Only passed
+ * for internal PDFs: the agent's own export, and emails with no customer recipients.
+ */
+export function healthSection(health) {
+  if (!health || health.score === null || health.score === undefined) return null;
+  return {
+    score: String(health.score),
+    band: health.band?.label || '',
+    kind: health.band?.kind || 'neutral',
+    signals: health.signals.map((s) => ({ label: s.label, detail: s.detail, score: s.score, weight: `${s.share ?? s.weight}%` })),
+    note: 'Internal: 0–100, higher is healthier. Each signal is scored 0–100 and weighted; signals without enough data are left out.',
+  };
+}
+
+export function pdfContent({ report, groups = report?.groups || [], ai = null, generatedAt = new Date(), filter = null, crew = null, health = null }) {
   if (!report) throw new Error('There is no report to export.');
   const nameOf = (group, index) => ai?.patterns?.find((p) => p.index === index)?.title || group.theme;
   const whereOf = (group) => (report.breakdownFields || [])
@@ -129,6 +144,7 @@ export function pdfContent({ report, groups = report?.groups || [], ai = null, g
     actions: ai?.actions || [],
     categories,
     crew: crewSection(crew),
+    health: healthSection(health),
     volume: { points: report.timeSeries || [], unit: (Date.parse(report.endDate) - Date.parse(report.startDate)) / 86400000 < 35 ? 'day' : 'week' },
     issues,
     moreIssues: Math.max(0, groups.length - PDF_ISSUES),

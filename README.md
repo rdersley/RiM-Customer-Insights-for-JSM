@@ -13,6 +13,7 @@ A Forge app that finds the recurring issues behind a customer organisation's tic
 - **AI summary** (optional, per run): Atlassian-hosted Claude through Forge LLMs merges patterns that are the same issue and writes names, an overview and next steps. Ticket text stays on the Atlassian platform.
 - **Export**: PDF (a printable report for customer reviews, built in the browser) and CSV.
 - **Breakdowns and data quality**: up to 5 admin-chosen fields (for example base or device type), with drill-down, and the share of tickets with no value or a placeholder such as "Unknown".
+- **Customer health** (list off by default): a 0–100 score per customer from volume, rising issues, SLAs, aged backlog and satisfaction, on each customer report and, for organisations an admin lists, ranked on the main page once a day. Internal only.
 - **Spike alerts** (off by default): once a day, watched organisations' last 7 days are compared with the 7 before. Jumps show in the app and, if an admin switches it on, as Jira tickets in a chosen project.
 - **Customer portal** (off by default): an agent reviews names, summary and next steps and publishes. The app then builds the customer's report from that organisation's own tickets: counts, trends, time to resolve, recent requests linking to the portal, and the breakdowns an admin marks **Show on portal**. Customers only ever see reports for organisations they belong to.
 
@@ -56,6 +57,7 @@ src/engine.js           Search, sampling and the analysis run
 src/analysis.js         Grouping, trends, resolution time, breakdowns, data quality
 src/ai.js               Forge LLMs: merge, summary, live assignment
 src/alerts.js           Spike alerts
+src/health.js, healthJobs.js  Customer health score and the daily all-customers list
 src/live.js, liveJobs.js  Portal report builds and the hourly scheduler
 src/publish.js          Snapshot validation (what customers can receive)
 static/app|portal|settings  React UIs (Retail inMotion UI kit)

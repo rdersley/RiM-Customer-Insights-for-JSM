@@ -14,6 +14,8 @@ const FILL = [244, 245, 247];
 const MORE = [174, 46, 36]; // more tickets than before
 const FEWER = [31, 132, 90];
 const WHITE = [255, 255, 255];
+const AMBER = [166, 98, 0];
+const bandColour = (kind) => (kind === 'success' ? FEWER : kind === 'warning' ? AMBER : kind === 'danger' ? MORE : MUTED);
 
 const W = 210; // A4, millimetres
 const H = 297;
@@ -101,6 +103,30 @@ export function buildPdf(JsPdf, c, { product = 'Customer Insights', version = ''
     if (k.hint) { font(7.5, 'normal', MUTED); doc.text(split(k.hint, boxW - 7)[0] || '', x + 3.5, y + 17); }
   });
   y += 26;
+
+  // ---- Customer health (internal PDFs only) ------------------------------------
+  if (c.health) {
+    heading('Customer health (internal)');
+    const h = c.health;
+    room(20);
+    doc.setFillColor(...FILL); doc.roundedRect(M, y, 46, 18, 1.5, 1.5, 'F');
+    font(20, 'bold', bandColour(h.kind)); doc.text(pdfSafe(h.score), M + 4, y + 10.5);
+    font(9, 'bold', bandColour(h.kind)); doc.text(pdfSafe(h.band), M + 4, y + 15.5);
+    font(8, 'normal', MUTED); doc.text('out of 100', M + 22, y + 10.5);
+    let rowY = y;
+    for (const s of h.signals) {
+      const x = M + 52;
+      font(9, 'bold'); doc.text(pdfSafe(s.label), x, rowY + 3.5);
+      font(8.5, 'normal', MUTED); doc.text(split(s.detail, 88)[0] || '', x + 30, rowY + 3.5);
+      const barX = W - M - 22;
+      doc.setFillColor(...RULE); doc.rect(barX, rowY + 1.2, 14, 2.4, 'F');
+      doc.setFillColor(...bandColour(s.score >= 75 ? 'success' : s.score >= 50 ? 'warning' : 'danger')); doc.rect(barX, rowY + 1.2, (14 * s.score) / 100, 2.4, 'F');
+      font(8.5, 'bold'); doc.text(String(s.score), W - M, rowY + 3.5, { align: 'right' });
+      rowY += 5;
+    }
+    y = Math.max(y + 18, rowY) + 3;
+    paragraph(h.note, { size: 8, rgb: MUTED, gap: 2 });
+  }
 
   // ---- AI summary --------------------------------------------------------------
   if (c.overview || c.actions.length) {

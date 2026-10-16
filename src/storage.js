@@ -183,6 +183,36 @@ export async function saveSurgeState(orgId, state) {
   await (await kvs()).set(surgeStateKey(orgId), state);
 }
 
+// Customer health (src/healthJobs.js): the latest score per organisation, with its history.
+const healthKey = (orgId) => `health:${String(orgId).replace(/D/g, '')}`;
+
+export async function loadHealth(orgId) {
+  return (await (await kvs()).get(healthKey(orgId))) || null;
+}
+
+export async function saveHealth(record) {
+  await (await kvs()).set(healthKey(record.organization.id), record);
+}
+
+export async function deleteHealth(orgId) {
+  await (await kvs()).delete(healthKey(orgId));
+}
+
+/** Every stored health record. */
+export async function listHealth() {
+  const { kvs: store, WhereConditions } = await import('@forge/kvs');
+  const records = [];
+  let cursor;
+  do {
+    let query = store.query().where('key', WhereConditions.beginsWith('health:')).limit(50);
+    if (cursor) query = query.cursor(cursor);
+    const page = await query.getMany();
+    records.push(...page.results.map((r) => r.value));
+    cursor = page.nextCursor;
+  } while (cursor);
+  return records;
+}
+
 export async function loadAlert(id) {
   return (await (await kvs()).get(alertKey(id))) || null;
 }

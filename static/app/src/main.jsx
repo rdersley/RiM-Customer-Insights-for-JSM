@@ -12,6 +12,8 @@ import CrewRates from './CrewRates.jsx';
 import { EffortCard, FlowCard, KnowledgeCard, SlaCard } from './WorkloadCards.jsx';
 import TeamPerformance from './TeamPerformance.jsx';
 import EscalationCard from './EscalationCard.jsx';
+import { HealthBoard, HealthCard } from './HealthCards.jsx';
+import { healthOf } from '../../../src/health.js';
 import ChannelPicker, { useChannel } from './ChannelPicker.jsx';
 import DevicesCard, { impactLine, PriorityLozenge } from './DevicesCard.jsx';
 import { crewRates } from '../../../src/headcount.js';
@@ -146,6 +148,9 @@ function App() {
   const [flow, setFlow] = useState(null);
   const [flowLoading, setFlowLoading] = useState(false);
   const [flowError, setFlowError] = useState('');
+  // Customer health: the all-customers list, and whether the report's score goes in the PDF.
+  const [healthBoard, setHealthBoard] = useState(null);
+  const [healthInPdf, setHealthInPdf] = useState(true);
   // Team performance (agentPerformance), loaded after each analysis like flow.
   const [team, setTeam] = useState({ data: null, loading: false, error: '' });
   // Escalation levels (internal, project settings that switch it on).
@@ -163,7 +168,10 @@ function App() {
       setLicensed(result?.licensed !== false);
       setOrgs(list);
       if (list.length) setOrgIds([String(list[0].id)]);
-      if (result?.licensed !== false) invoke('getAlerts').then((a) => setAlerts(a?.alerts || [])).catch(() => {});
+      if (result?.licensed !== false) {
+        invoke('getAlerts').then((a) => setAlerts(a?.alerts || [])).catch(() => {});
+        invoke('getHealthBoard').then(setHealthBoard).catch(() => {});
+      }
     }).catch((e) => setError(e.message || 'Could not load customer organisations.'))
       .finally(() => setLoadingOrgs(false));
   }, []);
@@ -184,6 +192,13 @@ function App() {
       runAnalysis();
     }
   });
+
+  // "Analyse" on the health list: the organisation over the score's 30 days.
+  function analyseHealth(row) {
+    if (!row.period || !orgs.some((o) => o.id === row.organization.id)) return;
+    setMode('customers'); setOrgIds([row.organization.id]); setFrom(row.period.from); setTo(row.period.to); setProjectsText('');
+    setPendingRun({ orgId: row.organization.id, from: row.period.from, to: row.period.to });
+  }
 
   function analyseAlert(alert) {
     if (!orgs.some((o) => o.id === alert.organization.id)) return;
@@ -309,6 +324,8 @@ function App() {
 
   // Portal reports are for one organisation, so publishing needs a single-organisation analysis.
   const reportOrgId = lastQuery?.organizations?.length > 1 ? null : lastQuery?.organization?.id;
+  // Customer health for customer reports (not internal ones or drill-downs); the backlog arrives with the flow counts.
+  const health = report && lastQuery?.scope !== 'internal' && !report.filter ? healthOf(report, flow?.backlog || null) : null;
   useEffect(() => {
     setPublication(null); setDraft(null); setPublishError('');
     if (!report || !reportOrgId) return;
@@ -475,7 +492,7 @@ function App() {
     try {
       // Logos are optional: a failed lookup still gives a PDF.
       const logos = await invoke('getPdfLogos', { orgId: reportOrgId || null }).catch(() => null);
-      await exportPdf({ report, groups, ai, filter: report.filter, crew, logos, product: PRODUCT, version });
+      await exportPdf({ report, groups, ai, filter: report.filter, crew, health: healthInPdf && health?.score !== null ? health : null, logos, product: PRODUCT, version });
     } catch (e) {
       setError(`The PDF couldn’t be created: ${e.message || 'unknown error'}`);
     } finally { setPdfBusy(false); }
@@ -651,6 +668,8 @@ function App() {
         </div>
       </li>)}</ul>
     </Card>}
+
+    {licensed && <HealthBoard board={healthBoard} onAnalyse={analyseHealth} canAnalyse={(row) => Boolean(row.period) && !loadingReport && orgs.some((o) => o.id === row.organization.id)} />}
 
     {licensed && <Card>
       <div className="ci-mode"><Tabs items={[{ id: 'customers', label: 'Customers' }, { id: 'internal', label: 'Internal' }]} active={mode} onChange={setMode} /></div>
@@ -828,6 +847,8 @@ function App() {
             : <EmptyState compact title="No repeated patterns found in these tickets yet." />}
         </Card>
       </div>
+
+      <HealthCard health={health} backlogLoading={flowLoading} includeInPdf={healthInPdf} onIncludeInPdf={setHealthInPdf} />
 
       <FlowCard flow={flow} loading={flowLoading} error={flowError} timeOfDay={report.timeOfDay} />
 

@@ -4,6 +4,8 @@ import { asApp, asUser, route } from '@forge/api';
 import { buildReport, chartBuckets } from './analysis.js';
 import { breakdownFieldIds, dimensionsOf, jqlClause } from './settings.js';
 import { validTimeZone } from './timeOfDay.js';
+import { satisfactionFieldId } from './agents.js';
+import { AGED_DAYS } from './health.js';
 
 export const DAY = 86400000;
 
@@ -52,6 +54,35 @@ async function jiraPost(path, body, label, mode) {
     method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   }));
   return readJson(response, label);
+}
+
+// The site's satisfaction (CSAT) field, looked up at most every 10 minutes per
+// warm function instance. null when the site has none or the lookup fails.
+let csatCache = null;
+export async function satisfactionField(mode) {
+  if (csatCache && Date.now() - csatCache.at < 600000) return csatCache.id;
+  try {
+    const response = await jira(mode).requestJira(route`/rest/api/3/field`, { headers: { Accept: 'application/json' } });
+    csatCache = { id: satisfactionFieldId(await readJson(response, 'Field list')), at: Date.now() };
+    return csatCache.id;
+  } catch (error) {
+    console.log(`satisfaction field lookup failed: ${error.message}`);
+    return null;
+  }
+}
+
+/** Open tickets for a query's scope now, and how many are older than AGED_DAYS (health score). null if the counts fail. */
+export async function backlogFor(query, mode) {
+  try {
+    const [open, recent] = await Promise.all([
+      countIssues(`${query.scopeJql} AND statusCategory != Done`, mode),
+      countIssues(`${query.scopeJql} AND statusCategory != Done AND created >= "-${AGED_DAYS}d"`, mode),
+    ]);
+    return { open, aged: Math.max(0, open - recent) };
+  } catch (error) {
+    console.log(`backlog counts failed: ${error.message}`);
+    return null;
+  }
 }
 
 /** Jira's fast count (not a full search). Permissions apply as for search. */
@@ -203,9 +234,9 @@ export function parseQuery(payload, filter = null, { clientFields = [] } = {}) {
  * Exact totals, an even sample of up to 900 tickets per period, and the
  * report. `budgetMs` stops new fetches in time for the caller's limit.
  */
-export async function runAnalysis(query, { breakdowns = [], minPatternSize, placeholders, synonyms, slaFields = [], devices = null, channelField = null, mode = 'user', budgetMs = 15000 } = {}) {
+export async function runAnalysis(query, { breakdowns = [], minPatternSize, placeholders, synonyms, slaFields = [], devices = null, channelField = null, satisfactionId = null, mode = 'user', budgetMs = 15000 } = {}) {
   // SLA fields are fetched with the tickets but aren't breakdowns.
-  const fetched = [...breakdowns, ...slaFields.map((f) => ({ id: f.id, kind: null })), ...deviceFieldIds(devices).map((id) => ({ id, kind: null })), ...(channelField ? [{ id: channelField.id, kind: null }] : [])];
+  const fetched = [...breakdowns, ...slaFields.map((f) => ({ id: f.id, kind: null })), ...deviceFieldIds(devices).map((id) => ({ id, kind: null })), ...(channelField ? [{ id: channelField.id, kind: null }] : []), ...(satisfactionId ? [{ id: satisfactionId, kind: null }] : [])];
   const { startDate, endDate, previousStart, endExclusive, between } = query;
   const startedAt = Date.now();
   const deadline = startedAt + budgetMs;
@@ -251,7 +282,7 @@ export async function runAnalysis(query, { breakdowns = [], minPatternSize, plac
     timeSeries = buckets.map((b, i) => ({ date: b.date, count: counts[i] }));
   }
   const issues = [...currentIssues, ...previousIssues];
-  const report = buildReport(issues, startDate, endDate, { current: currentTotal, previous: previousTotal, timeSeries }, { breakdowns, minPatternSize, placeholders, synonyms, slaFields, devices, channelField, timeZone: query.timeZone });
+  const report = buildReport(issues, startDate, endDate, { current: currentTotal, previous: previousTotal, timeSeries }, { breakdowns, minPatternSize, placeholders, synonyms, slaFields, devices, channelField, satisfactionId, timeZone: query.timeZone });
   console.log(`analysis (${mode}): ${currentTotal}+${previousTotal} tickets, ${issues.length} fetched in ${Date.now() - startedAt}ms`);
   return {
     ...report,
