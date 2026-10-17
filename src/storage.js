@@ -173,7 +173,7 @@ export async function listOrgLogos() {
 }
 
 // Live surge detection (src/surge.js): open surges per organisation.
-const surgeStateKey = (orgId) => `surge-state:${String(orgId).replace(/D/g, '')}`;
+const surgeStateKey = (orgId) => `surge-state:${String(orgId).replace(/\D/g, '')}`;
 
 export async function loadSurgeState(orgId) {
   return (await (await kvs()).get(surgeStateKey(orgId))) || {};
@@ -184,7 +184,7 @@ export async function saveSurgeState(orgId, state) {
 }
 
 // Customer health (src/healthJobs.js): the latest score per organisation, with its history.
-const healthKey = (orgId) => `health:${String(orgId).replace(/D/g, '')}`;
+const healthKey = (orgId) => `health:${String(orgId).replace(/\D/g, '')}`;
 
 export async function loadHealth(orgId) {
   return (await (await kvs()).get(healthKey(orgId))) || null;
