@@ -105,14 +105,19 @@ export function flyingFromRoster(text, crewTotal) {
   if (dateCol < 0 || crewCol < 0) throw new Error('The roster needs a FlightDate column and a CrewCode column.');
   const flightCol = header.findIndex((h) => ['flightnumber', 'flight', 'flightno'].includes(h));
   const days = new Map();
-  const flights = new Map();
+  const duties = new Map(); // date → crew → flights they work that day
   for (const r of rows.slice(1)) {
     const date = isoDate(r[dateCol]);
     const crew = String(r[crewCol] ?? '').trim().toUpperCase();
     if (!date || !crew) continue;
     if (!days.has(date)) days.set(date, new Set());
     days.get(date).add(crew);
-    if (flightCol >= 0 && r[flightCol]) { if (!flights.has(date)) flights.set(date, new Set()); flights.get(date).add(String(r[flightCol]).trim().toUpperCase()); }
+    if (flightCol >= 0 && r[flightCol]) {
+      if (!duties.has(date)) duties.set(date, new Map());
+      const byCrew = duties.get(date);
+      if (!byCrew.has(crew)) byCrew.set(crew, new Set());
+      byCrew.get(crew).add(String(r[flightCol]).trim().toUpperCase());
+    }
   }
   if (!days.size) throw new Error('No crew found in the roster.');
   const perDay = [...days.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, set]) => ({ date, crew: set.size }));
@@ -120,10 +125,15 @@ export function flyingFromRoster(text, crewTotal) {
   if (!(crewTotal > 0)) throw new Error('Add the crew list first.');
   const share = Math.round((average / crewTotal) * 1000) / 10;
   if (share > 100) throw new Error(`The roster has more crew a day (${Math.round(average)}) than the crew list (${crewTotal}). Is it the right crew list?`);
-  // One crew member per flight using the device: flights a day as a share of crew flying.
-  const flightsPerDay = flights.size ? Math.round([...flights.values()].reduce((n, s) => n + s.size, 0) / flights.size) : null;
-  const onePerFlight = flightsPerDay ? Math.min(100, Math.round((flightsPerDay / average) * 1000) / 10) : null;
-  return { share, days: perDay.length, averageCrew: Math.round(average), perDay, flightsPerDay, onePerFlight };
+  // Crew teams: crew who work the same flights that day (e.g. 4 on an aircraft in
+  // the morning, another 4 in the afternoon). One device user per team is the
+  // teams a day as a share of crew flying (about 25% with crews of four).
+  const teamCounts = [...duties.values()].map((byCrew) => new Set([...byCrew.values()].map((set) => [...set].sort().join('|'))).size);
+  const flightCounts = [...duties.values()].map((byCrew) => new Set([...byCrew.values()].flatMap((set) => [...set])).size);
+  const mean = (list) => (list.length ? Math.round(list.reduce((n, v) => n + v, 0) / list.length) : null);
+  const teamsPerDay = mean(teamCounts);
+  const onePerTeam = teamsPerDay ? Math.min(100, Math.round((teamsPerDay / average) * 1000) / 10) : null;
+  return { share, days: perDay.length, averageCrew: Math.round(average), perDay, flightsPerDay: mean(flightCounts), teamsPerDay, onePerTeam };
 }
 
 const percent = (value) => { const n = Math.round(Number(value) * 10) / 10; return n > 0 && n <= 100 ? n : null; };
@@ -138,10 +148,12 @@ export function sanitizeFlying(input) {
   if (!share) return null;
   const days = Number(input?.days);
   const flights = Number(input?.flightsPerDay);
+  const teams = Number(input?.teamsPerDay);
   return {
     share,
     usingShare: percent(input?.usingShare) ?? 100,
-    onePerFlight: percent(input?.onePerFlight),
+    onePerTeam: percent(input?.onePerTeam),
+    teamsPerDay: Number.isInteger(teams) && teams > 0 && teams < 1000000 ? teams : null,
     flightsPerDay: Number.isInteger(flights) && flights > 0 && flights < 1000000 ? flights : null,
     days: Number.isInteger(days) && days > 0 && days <= 400 ? days : null, // null: typed in by an admin
     source: clip(input?.source, 120),

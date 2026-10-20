@@ -17,7 +17,7 @@ test('roster: distinct crew a day, averaged, as a share of the crew list', () =>
   assert.equal(r.share, 15); // 1.5 a day of 10
   assert.throws(() => flyingFromRoster('Date,Name\n1,2', 10), /CrewCode/);
   assert.throws(() => flyingFromRoster(roster, 1), /more crew a day/);
-  assert.deepEqual(sanitizeFlying({ share: '29.14', days: 2, source: 'r.csv', updatedAt: '2026-10-20T10:00:00.000Z' }), { share: 29.1, usingShare: 100, onePerFlight: null, flightsPerDay: null, days: 2, source: 'r.csv', updatedAt: '2026-10-20T10:00:00.000Z' });
+  assert.deepEqual(sanitizeFlying({ share: '29.14', days: 2, source: 'r.csv', updatedAt: '2026-10-20T10:00:00.000Z' }), { share: 29.1, usingShare: 100, onePerTeam: null, teamsPerDay: null, flightsPerDay: null, days: 2, source: 'r.csv', updatedAt: '2026-10-20T10:00:00.000Z' });
   assert.equal(sanitizeFlying({ share: 29, usingShare: 75.12 }).usingShare, 75.1);
   assert.equal(sanitizeFlying({ share: 29, usingShare: 0 }).usingShare, 100);
   assert.equal(sanitizeFlying({ share: 0 }), null);
@@ -44,8 +44,14 @@ test('devices are judged against crew flying that day, on the worst single day',
   assert.equal(deviceImpact(counts, { vPOS: 1000 }, config)[0].suggested, 'P2');
 });
 
-test('one crew member per flight: the roster suggests the share using a device', () => {
+test('one device user per crew team: the roster suggests the share using a device', () => {
+  // Day 1: AAA and BBB both work FR10 (a team), AAA also FR11, so two teams by flights worked
+  // (AAA: FR10+FR11, BBB: FR10); day 2: one team (CCC). Crews of four give about 25% in real rosters.
   const r = flyingFromRoster(roster, 10);
-  assert.equal(r.flightsPerDay, 2); // FR10+FR11 on day 1, FR20 on day 2: 1.5 a day, rounded
+  assert.equal(r.teamsPerDay, 2); // (2 + 1) / 2, rounded
+  assert.equal(r.flightsPerDay, 2);
+  const shift = ['FlightDate,FlightNumber,CrewCode', ...['A', 'B', 'C', 'D'].flatMap((c) => ['FR1', 'FR2'].map((f) => `20/10/2026,${f},${c}`)), ...['E', 'F', 'G', 'H'].flatMap((c) => ['FR3', 'FR4'].map((f) => `20/10/2026,${f},${c}`))].join('\n');
+  const s = flyingFromRoster(shift, 100);
+  assert.deepEqual([s.teamsPerDay, s.flightsPerDay, s.onePerTeam], [2, 4, 25]); // a morning and an afternoon crew of four
   assert.equal(crewFlyingPerDay({ values: [{ value: 'STN', count: 1000 }], flying: { share: 30, usingShare: 75 } }), 225);
 });
