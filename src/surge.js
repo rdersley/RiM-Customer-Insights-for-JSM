@@ -206,7 +206,7 @@ export async function checkSurges(organization, settings, { jira, store, now = D
   const deviceConfig = settings.devices?.idFieldId ? settings.devices : null;
   const headcount = deviceConfig ? headcountFor(settings.headcounts, [organization.id]) : null;
   // Devices in use today (crew flying on a typical day) when the crew list has a roster share, else the whole fleet.
-  const { fleet } = fleetForHeadcount(headcount, deviceConfig);
+  const { fleet, reportShare } = fleetForHeadcount(headcount, deviceConfig);
   const deviceFields = deviceConfig ? [deviceConfig.idFieldId, deviceConfig.typeFieldId].filter(Boolean).map((id) => ({ id, kind: null })) : [];
   const extra = [...breakdowns, ...config.copyFields.map((f) => ({ id: f.id, kind: null })), ...deviceFields];
   const issues = await jira.search(`${orgClause} AND created >= "-${config.windowMinutes}m"`, MAX_FETCH, extra);
@@ -225,7 +225,7 @@ export async function checkSurges(organization, settings, { jira, store, now = D
     const surge = { ...candidate, baseline, windowMinutes: config.windowMinutes, organization };
     if (deviceConfig) {
       const keys = new Set(candidate.keys);
-      surge.devices = deviceImpact(devicesAffected(issues.filter((i) => keys.has(i.key)), deviceConfig), fleet, deviceConfig).slice(0, 4);
+      surge.devices = deviceImpact(devicesAffected(issues.filter((i) => keys.has(i.key)), deviceConfig), fleet, deviceConfig, { reportShare }).slice(0, 4);
       surge.suggested = surge.devices.find((d) => d.suggested)?.suggested || null;
     }
     if (existing) {

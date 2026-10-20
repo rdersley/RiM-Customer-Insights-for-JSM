@@ -46,7 +46,7 @@ test('share of the fleet from crew numbers, and the suggested priority', () => {
   assert.equal(suggestPriority(5, config), 'P2');
   assert.equal(suggestPriority(null, config), null);
   assert.equal(impactText(impact), '250 of 1,000 vPOS (25%), 10 of 1,000 Card reader (1%)');
-  assert.deepEqual(deviceImpact({ byType: { vPOS: 3 } }, {}, config)[0], { label: 'vPOS', devices: 3, fleet: null, share: null, suggested: null });
+  assert.deepEqual(deviceImpact({ byType: { vPOS: 3 } }, {}, config)[0], { label: 'vPOS', devices: 3, estimated: 3, fleet: null, share: null, suggested: null });
 });
 
 test('reports count devices per recurring issue', () => {
@@ -73,6 +73,6 @@ test('a live surge reports devices affected and a suggested priority', async () 
   const store = { loadSurgeState: async () => ({}), saveSurgeState: async () => {}, saveAlert: async (a) => { saved = a; } };
   await checkSurges({ id: '188', name: 'Ryanair Crew' }, settings, { jira, store, now });
   // 6 of 20 vPOS = 30% -> P1.
-  assert.deepEqual(saved.surge.devices[0], { label: 'vPOS', devices: 6, fleet: 20, share: 30, suggested: 'P1' });
+  assert.deepEqual(saved.surge.devices[0], { label: 'vPOS', devices: 6, estimated: 6, fleet: 20, share: 30, suggested: 'P1' });
   assert.equal(saved.surge.suggested, 'P1');
 });

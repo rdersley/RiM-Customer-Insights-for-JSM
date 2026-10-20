@@ -130,10 +130,12 @@ export function crewFlyingPerDay(headcount) {
  * list has a share flying ({ daily: true }), else the whole fleet.
  */
 export function fleetForHeadcount(headcount, config) {
-  if (!headcount?.values?.length) return { fleet: {}, daily: false, crew: 0 };
+  if (!headcount?.values?.length) return { fleet: {}, daily: false, crew: 0, reportShare: 100 };
   const flying = crewFlyingPerDay(headcount);
   const crew = flying ?? headcount.values.reduce((n, v) => n + v.count, 0);
-  return { fleet: fleetFromCrew(crew, config), daily: flying !== null, crew };
+  // Share of affected crew who raise a ticket: reported devices are scaled up by it.
+  const reportShare = flying !== null && Number(headcount.flying.reportShare) > 0 ? Number(headcount.flying.reportShare) : 100;
+  return { fleet: fleetFromCrew(crew, config), daily: flying !== null, crew, reportShare };
 }
 
 /** Counts to judge against a daily fleet: each type's worst single day. */
@@ -144,19 +146,26 @@ export const suggestPriority = (share, config) => (share === null ? null : share
 
 /**
  * Device impact for a set of device counts against the fleet: per type with a
- * fleet size, the share affected and a suggested priority, worst first.
+ * fleet size, the share affected and a suggested priority, worst first. When
+ * only some affected crew raise a ticket (`reportShare` < 100, e.g. one per crew
+ * team), reported devices are scaled up to `estimated` and the share uses that.
  */
-export function deviceImpact(counts, fleet, config) {
+export function deviceImpact(counts, fleet, config, { reportShare = 100 } = {}) {
+  const scale = reportShare > 0 && reportShare < 100 ? 100 / reportShare : 1;
   return Object.entries(counts?.byType || {})
     .map(([label, devices]) => {
       const size = fleet[label] || null;
-      const share = size ? Math.round((devices / size) * 1000) / 10 : null;
-      return { label, devices, fleet: size, share, suggested: suggestPriority(share, config) };
+      const estimated = scale === 1 ? devices : Math.round(devices * scale);
+      const affected = size ? Math.min(size, estimated) : estimated;
+      const share = size ? Math.round((affected / size) * 1000) / 10 : null;
+      return { label, devices, estimated: affected, fleet: size, share, suggested: suggestPriority(share, config) };
     })
     .sort((a, b) => (b.share ?? -1) - (a.share ?? -1) || b.devices - a.devices);
 }
 
 /** "312 of 16,266 vPOS (1.9%)" lines for alerts and ticket descriptions. */
 export function impactText(impact) {
-  return impact.map((i) => (i.fleet ? `${i.devices.toLocaleString('en-GB')} of ${i.fleet.toLocaleString('en-GB')} ${i.label} (${i.share}%)` : `${i.devices.toLocaleString('en-GB')} ${i.label}`)).join(', ');
+  const n = (v) => Number(v || 0).toLocaleString('en-GB');
+  const count = (i) => (i.estimated && i.estimated !== i.devices ? `${n(i.devices)} reported (≈${n(i.estimated)} affected)` : n(i.devices));
+  return impact.map((i) => (i.fleet ? `${count(i)} of ${n(i.fleet)} ${i.label} (${i.share}%)` : `${count(i)} ${i.label}`)).join(', ');
 }

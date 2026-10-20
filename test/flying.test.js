@@ -17,7 +17,7 @@ test('roster: distinct crew a day, averaged, as a share of the crew list', () =>
   assert.equal(r.share, 15); // 1.5 a day of 10
   assert.throws(() => flyingFromRoster('Date,Name\n1,2', 10), /CrewCode/);
   assert.throws(() => flyingFromRoster(roster, 1), /more crew a day/);
-  assert.deepEqual(sanitizeFlying({ share: '29.14', days: 2, source: 'r.csv', updatedAt: '2026-10-20T10:00:00.000Z' }), { share: 29.1, usingShare: 100, onePerTeam: null, teamsPerDay: null, flightsPerDay: null, days: 2, source: 'r.csv', updatedAt: '2026-10-20T10:00:00.000Z' });
+  assert.deepEqual(sanitizeFlying({ share: '29.14', days: 2, source: 'r.csv', updatedAt: '2026-10-20T10:00:00.000Z' }), { share: 29.1, usingShare: 100, reportShare: 100, onePerTeam: null, teamsPerDay: null, flightsPerDay: null, days: 2, source: 'r.csv', updatedAt: '2026-10-20T10:00:00.000Z' });
   assert.equal(sanitizeFlying({ share: 29, usingShare: 75.12 }).usingShare, 75.1);
   assert.equal(sanitizeFlying({ share: 29, usingShare: 0 }).usingShare, 100);
   assert.equal(sanitizeFlying({ share: 0 }), null);
@@ -54,4 +54,16 @@ test('one device user per crew team: the roster suggests the share using a devic
   const s = flyingFromRoster(shift, 100);
   assert.deepEqual([s.teamsPerDay, s.flightsPerDay, s.onePerTeam], [2, 4, 25]); // a morning and an afternoon crew of four
   assert.equal(crewFlyingPerDay({ values: [{ value: 'STN', count: 1000 }], flying: { share: 30, usingShare: 75 } }), 225);
+});
+
+test('only some affected crew raise a ticket: reported devices are scaled up', () => {
+  const config = { ...DEFAULT_DEVICES, idFieldId: 'cf_id' };
+  // Every crew member has a device: 1,000 crew × 30% flying = 300 in use; 1 in 4 report.
+  const headcount = { values: [{ value: 'STN', count: 1000 }], flying: { share: 30, reportShare: 25 } };
+  const { fleet, reportShare } = fleetForHeadcount(headcount, config);
+  assert.deepEqual([fleet.vPOS, reportShare], [300, 25]);
+  const [vpos] = deviceImpact({ byType: { vPOS: 16 } }, fleet, config, { reportShare });
+  assert.deepEqual([vpos.devices, vpos.estimated, vpos.share, vpos.suggested], [16, 64, 21.3, 'P1']);
+  assert.equal(deviceImpact({ byType: { vPOS: 16 } }, fleet, config)[0].suggested, 'P2'); // unscaled: 5.3%
+  assert.equal(deviceImpact({ byType: { vPOS: 200 } }, fleet, config, { reportShare })[0].estimated, 300); // never more than in use
 });
