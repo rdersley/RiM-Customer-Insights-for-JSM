@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.31.1 (2026-10-20)
+
+- **Settings → Internal:** the default view lists every set of project settings with its projects and whether Escalation levels and Hardware dispatch are on, with an Open button, and says that both are set per project. They were easy to miss behind the Editing dropdown.
+
 ## 1.31.0 (2026-10-20)
 
 - **Devices: everyone has a device, not everyone reports.** Every Ryanair crew member has their own device (8 crew use an aircraft over a day, 4 in the morning and 4 in the afternoon), so devices in use a day are all crew flying again ("% of them with a device", default 100%). What 1.28/1.29 modelled as fewer devices in use is really fewer tickets: a new "% of affected crew who raise a ticket" (default 100%; "One per crew team" from the roster, 25.3%) scales reported devices up to an estimate of devices affected. P1/P2 compare that estimate with devices in use, e.g. 240 reported ≈ 950 affected of 4,734 (20%) → P1. Cards, alerts and incident tickets show both: "240 reported (≈950 affected) of 4,734 vPOS (20.1%)".
