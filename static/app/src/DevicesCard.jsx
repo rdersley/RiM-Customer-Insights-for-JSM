@@ -15,23 +15,24 @@ export function PriorityLozenge({ suggested }) {
 }
 
 export function impactLine(impact) {
-  return impact.map((i) => (i.fleet ? `${n(i.devices)} of ${n(i.fleet)} ${i.label} (${i.share}%)` : `${n(i.devices)} ${i.label}`)).join(' · ');
+  const count = (i) => (i.estimated && i.estimated !== i.devices ? `${n(i.devices)} reported (≈${n(i.estimated)} affected)` : n(i.devices));
+  return impact.map((i) => (i.fleet ? `${count(i)} of ${n(i.fleet)} ${i.label} (${i.share}%)` : `${count(i)} ${i.label}`)).join(' · ');
 }
 
 export default function DevicesCard({ report, groups, nameOf, headcount }) {
   const config = report?.deviceConfig;
   if (!config || !report.devices?.any) return null;
-  const { fleet, daily, crew } = fleetForHeadcount(headcount, config);
+  const { fleet, daily, crew, reportShare } = fleetForHeadcount(headcount, config);
   // Daily fleet: judge each issue on its worst single day; otherwise the whole period.
   const counts = (c) => (daily ? worstDay(c) : c);
-  const overall = deviceImpact(counts(report.devices), fleet, config);
+  const overall = deviceImpact(counts(report.devices), fleet, config, { reportShare });
   const rows = (groups || [])
-    .map((g, index) => ({ index, impact: deviceImpact(counts(g.devices), fleet, config) }))
+    .map((g, index) => ({ index, impact: deviceImpact(counts(g.devices), fleet, config, { reportShare }) }))
     .filter((r) => r.impact.length)
     .sort((a, b) => (b.impact[0].share ?? -1) - (a.impact[0].share ?? -1) || b.impact[0].devices - a.impact[0].devices)
     .slice(0, 10);
   return <Card title="Devices affected"
-    description={`Distinct devices named on the tickets (by device ID), by device type.${daily ? ` Measured against devices in use on a typical day: ${n(crew)} crew (${headcount.flying.share}% of the crew list flying${(headcount.flying.usingShare ?? 100) < 100 ? ` × ${headcount.flying.usingShare}% using a device` : ''}${headcount.flying.days ? `, from a ${headcount.flying.days}-day roster` : ''}) × ${config.types.map((t) => `${t.perCrew} ${t.label}`).join(' and ')} each, using each issue’s worst single day.` : crew ? ` Fleet from crew numbers: ${config.types.map((t) => `${t.perCrew} ${t.label}`).join(' and ')} per crew member. Upload a roster in settings (Crew numbers) to measure against crew flying that day.` : ' Add crew numbers for this organisation to see the share of the fleet.'} Suggested priority: P1 at ${config.p1Percent}%+, P2 at ${config.p2Percent}%+.${report.sampled ? ' Counted from the analysed sample, so the real number can be higher.' : ''}`}>
+    description={`Distinct devices named on the tickets (by device ID), by device type.${daily ? ` Measured against devices in use on a typical day: ${n(crew)} crew (${headcount.flying.share}% of the crew list flying${(headcount.flying.usingShare ?? 100) < 100 ? ` × ${headcount.flying.usingShare}% using a device` : ''}${headcount.flying.days ? `, from a ${headcount.flying.days}-day roster` : ''}) × ${config.types.map((t) => `${t.perCrew} ${t.label}`).join(' and ')} each, using each issue’s worst single day.${reportShare < 100 ? ` Only ${reportShare}% of affected crew raise a ticket (one per crew team), so reported devices are scaled up to an estimate of devices affected.` : ''}` : crew ? ` Fleet from crew numbers: ${config.types.map((t) => `${t.perCrew} ${t.label}`).join(' and ')} per crew member. Upload a roster in settings (Crew numbers) to measure against crew flying that day.` : ' Add crew numbers for this organisation to see the share of the fleet.'} Suggested priority: P1 at ${config.p1Percent}%+, P2 at ${config.p2Percent}%+.${report.sampled ? ' Counted from the analysed sample, so the real number can be higher.' : ''}`}>
     <p><strong>{daily ? 'Worst day in the period:' : 'In the period:'}</strong> {impactLine(overall)}</p>
     <div className="nq-table-wrap">
       <table className="nq-table ci-devices">

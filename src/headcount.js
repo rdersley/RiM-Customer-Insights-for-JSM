@@ -140,8 +140,10 @@ const percent = (value) => { const n = Math.round(Number(value) * 10) / 10; retu
 
 /**
  * A crew list's devices in use a day, validated (null when not set): `share` of
- * the crew flying a typical day, and `usingShare` of those using (or reporting
- * on) a device, e.g. one crew member per flight. Both adjustable by an admin.
+ * the crew flying a typical day, and `usingShare` of those with a device (100%
+ * for Ryanair: every crew member has their own). `reportShare` is the share of
+ * affected crew who raise a ticket (e.g. one per crew team of four), used to
+ * scale reported devices up to devices affected. All adjustable by an admin.
  */
 export function sanitizeFlying(input) {
   const share = percent(input?.share);
@@ -152,6 +154,7 @@ export function sanitizeFlying(input) {
   return {
     share,
     usingShare: percent(input?.usingShare) ?? 100,
+    reportShare: percent(input?.reportShare) ?? 100,
     onePerTeam: percent(input?.onePerTeam),
     teamsPerDay: Number.isInteger(teams) && teams > 0 && teams < 1000000 ? teams : null,
     flightsPerDay: Number.isInteger(flights) && flights > 0 && flights < 1000000 ? flights : null,

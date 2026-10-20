@@ -57,7 +57,7 @@ export default function CrewNumbers({ headcounts = [], onChange, organizations =
       const crew = headcounts[index].values.reduce((t, v) => t + v.count, 0);
       const result = flyingFromRoster(await file.text(), crew);
       // Keep an adjusted "using a device" share; the roster's one-per-flight figure is offered as a suggestion.
-      update(index, { flying: { ...headcounts[index].flying, share: result.share, days: result.days, flightsPerDay: result.flightsPerDay, teamsPerDay: result.teamsPerDay, onePerTeam: result.onePerTeam, onePerFlight: undefined, usingShare: headcounts[index].flying?.usingShare ?? 100, source: file.name, updatedAt: new Date().toISOString() } });
+      update(index, { flying: { ...headcounts[index].flying, share: result.share, days: result.days, flightsPerDay: result.flightsPerDay, teamsPerDay: result.teamsPerDay, onePerTeam: result.onePerTeam, usingShare: headcounts[index].flying?.usingShare ?? 100, reportShare: headcounts[index].flying?.reportShare ?? 100, source: file.name, updatedAt: new Date().toISOString() } });
     } catch (e) { setError(e.message || 'The roster could not be read.'); }
   }
 
@@ -92,18 +92,27 @@ export default function CrewNumbers({ headcounts = [], onChange, organizations =
               <label htmlFor={`cs-flying-${index}`}>Typical % of crew flying per day</label>
               <input id={`cs-flying-${index}`} className="nq-input cs-number" type="number" min={0.1} max={100} step={0.1} value={h.flying?.share ?? ''} placeholder="e.g. 29"
                 onChange={(e) => update(index, { flying: e.target.value === '' ? null : { ...h.flying, share: Number(e.target.value), days: null, source: 'Typed in', updatedAt: new Date().toISOString() } })} />
-              <label htmlFor={`cs-using-${index}`}>% of them using a device</label>
+              <label htmlFor={`cs-using-${index}`}>% of them with a device</label>
               <input id={`cs-using-${index}`} className="nq-input cs-number" type="number" min={0.1} max={100} step={0.1} value={h.flying?.usingShare ?? 100} disabled={!h.flying?.share}
                 onChange={(e) => update(index, { flying: { ...h.flying, usingShare: Number(e.target.value) } })} />
-              {h.flying?.onePerTeam && h.flying.usingShare !== h.flying.onePerTeam && <button type="button" className="nq-btn nq-btn--small" title="One device user per crew team (the crew working the same flights that day, e.g. 4 on an aircraft in the morning and 4 more in the afternoon)"
-                onClick={() => update(index, { flying: { ...h.flying, usingShare: h.flying.onePerTeam } })}>One per crew team ({h.flying.onePerTeam}%)</button>}
+            </div>
+            <div className="cs-flying">
+              <label htmlFor={`cs-report-${index}`}>% of affected crew who raise a ticket</label>
+              <input id={`cs-report-${index}`} className="nq-input cs-number" type="number" min={0.1} max={100} step={0.1} value={h.flying?.reportShare ?? 100} disabled={!h.flying?.share}
+                onChange={(e) => update(index, { flying: { ...h.flying, reportShare: Number(e.target.value) } })} />
+              {h.flying?.onePerTeam && h.flying.reportShare !== h.flying.onePerTeam && <button type="button" className="nq-btn nq-btn--small" title="One ticket per crew team (the crew working the same flights that day, e.g. 4 on an aircraft in the morning and 4 more in the afternoon)"
+                onClick={() => update(index, { flying: { ...h.flying, reportShare: h.flying.onePerTeam } })}>One per crew team ({h.flying.onePerTeam}%)</button>}
               <label className="nq-btn nq-btn--small cs-file">Upload roster<input type="file" accept=".csv,.txt" onChange={(e) => roster(index, e.target.files?.[0])} /></label>
             </div>
             <p className="nq-muted">{h.flying?.share
               ? (() => {
                 const flying = Math.round(crew * h.flying.share / 100);
                 const inUse = Math.round(flying * (h.flying.usingShare ?? 100) / 100);
-                return `≈ ${n(inUse)} devices of each type in use a day (${n(flying)} crew flying × ${h.flying.usingShare ?? 100}% using one${h.flying.teamsPerDay ? `; the roster has ${n(h.flying.teamsPerDay)} crew teams and ${n(h.flying.flightsPerDay)} flights a day` : ''}${h.flying.days ? `, from ${h.flying.source || 'a roster'}, ${h.flying.days} ${h.flying.days === 1 ? 'day' : 'days'}, ${day(h.flying.updatedAt)}` : ''}). Suggested P1 at ${n(Math.ceil(inUse * p1Percent / 100))}+ devices affected, P2 at ${n(Math.ceil(inUse * p2Percent / 100))}+ (Devices settings).`;
+                const report = h.flying.reportShare ?? 100;
+                const p1 = Math.ceil(inUse * p1Percent / 100);
+                const p2 = Math.ceil(inUse * p2Percent / 100);
+                const reported = (devices) => Math.ceil(devices * report / 100);
+                return `≈ ${n(inUse)} devices of each type in use a day (${n(flying)} crew flying × ${h.flying.usingShare ?? 100}% with one${h.flying.teamsPerDay ? `; the roster has ${n(h.flying.teamsPerDay)} crew teams and ${n(h.flying.flightsPerDay)} flights a day` : ''}${h.flying.days ? `, from ${h.flying.source || 'a roster'}, ${h.flying.days} ${h.flying.days === 1 ? 'day' : 'days'}, ${day(h.flying.updatedAt)}` : ''}). Suggested P1 at ${n(p1)}+ devices affected, P2 at ${n(p2)}+ (Devices settings)${report < 100 ? `: with ${report}% of affected crew raising a ticket, that's about ${n(reported(p1))} and ${n(reported(p2))} devices reported` : ''}.`;
               })()
               : 'Not set: devices are measured against the whole crew list. Upload a roster (one row per crew member per flight) once to work out the typical share flying a day.'}</p>
           </div>
