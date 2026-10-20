@@ -85,7 +85,7 @@ define('getHealthBoard', async ({ context }) => {
   if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
   const { health } = await loadSettings();
   if (!health?.enabled) return { enabled: false, rows: [] };
-  const [visible, records, admin] = await Promise.all([listOrganizations(), listHealth(), isJiraAdmin()]);
+  const [visible, records] = await Promise.all([listOrganizations(), listHealth()]);
   const ids = new Set(visible.map((o) => o.id));
   const byOrg = new Map(records.map((r) => [String(r.organization?.id), r]));
   const rows = health.organizations.filter((o) => ids.has(o.id)).map((organization) => {
@@ -99,13 +99,12 @@ define('getHealthBoard', async ({ context }) => {
       history: (r.history || []).slice(-30),
     };
   });
-  return { enabled: true, rows, canRefresh: admin, hidden: health.organizations.length - rows.length };
+  return { enabled: true, rows, canRefresh: true, hidden: health.organizations.length - rows.length };
 });
 
-// Health list: work out every listed organisation's score now. Jira admins only.
+// Health list: work out every listed organisation's score now. Any agent.
 define('refreshHealth', async ({ context }) => {
   if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
-  if (!(await isJiraAdmin())) throw new Error('Only Jira admins can refresh the health list.');
   const { health } = await loadSettings();
   if (!health?.enabled || !health.organizations.length) throw new Error('Turn on customer health and save at least one organisation first.');
   for (const organization of health.organizations) await queueHealth(organization.id);
@@ -290,8 +289,8 @@ define('knowledgeGaps', async ({ payload, context }) => {
 });
 
 // Team performance (src/agents.js): tickets resolved in the period and open
-// now, per assignee. Per-agent rows only for Jira admins; everyone else gets
-// the team totals. Nothing is stored. Large periods are sampled evenly and
+// now, per assignee, with team totals. Open to every agent. Nothing is
+// stored. Large periods are sampled evenly and
 // resolved counts scaled.
 const AGENT_SAMPLE = 2000;
 const AGENT_OPEN = 1000;
@@ -305,8 +304,7 @@ define('agentPerformance', async ({ payload, context }) => {
   const breakdowns = await breakdownsFor(payload, settings);
   const query = parseQuery(payload, filterFor(payload?.filter, breakdowns), { clientFields: allClientFields(settings) });
   const deadline = Date.now() + AGENT_BUDGET_MS;
-  const [admin, fieldList] = await Promise.all([
-    isJiraAdmin(),
+  const [fieldList] = await Promise.all([
     asUser().requestJira(route`/rest/api/3/field`, { headers: { Accept: 'application/json' } }).then((r) => readJson(r, 'Field list')),
   ]);
   const satisfactionId = satisfactionFieldId(fieldList);
@@ -340,7 +338,7 @@ define('agentPerformance', async ({ payload, context }) => {
   const statusesSeen = stats ? Object.entries(stats.seen).sort((a, b) => b[1] - a[1]).slice(0, 15).map(([name, tickets]) => ({ name, tickets })) : [];
   const options = { slaFields: config.slaFields, satisfactionId, handling, names };
   const scaleRow = (row) => (scale > 1 ? { ...row, resolved: Math.round(row.resolved * scale), loggedHours: Math.round(row.loggedHours * scale * 10) / 10, handlingHours: Math.round(row.handlingHours * scale * 10) / 10 } : row);
-  console.log(`agentPerformance: ${total} resolved (${resolved.length} read), ${openTotal} open (${open.length} read), handling ${handling ? `${handlingComplete ? 'complete' : 'partial'} (${stats.handled}/${Object.keys(handling).length} tickets with handling time, ${stats.unassigned} partly unassigned; statuses: ${statusesSeen.slice(0, 8).map((s) => `${s.name} ${s.tickets}`).join(', ')})` : 'skipped'}${admin ? ', per agent' : ', team only'}${cutShort ? ', cut short' : ''}`);
+  console.log(`agentPerformance: ${total} resolved (${resolved.length} read), ${openTotal} open (${open.length} read), handling ${handling ? `${handlingComplete ? 'complete' : 'partial'} (${stats.handled}/${Object.keys(handling).length} tickets with handling time, ${stats.unassigned} partly unassigned; statuses: ${statusesSeen.slice(0, 8).map((s) => `${s.name} ${s.tickets}`).join(', ')})` : 'skipped'}${cutShort ? ', cut short' : ''}`);
   return {
     resolvedTotal: total,
     openTotal,
@@ -351,8 +349,7 @@ define('agentPerformance', async ({ payload, context }) => {
     slaFields: config.slaFields.map(({ id, name }) => ({ id, name })),
     satisfaction: Boolean(satisfactionId),
     team: { ...scaleRow(teamTotals(resolved, open, options)), resolved: total, open: openTotal },
-    // Per-agent figures are for Jira admins only.
-    agents: admin ? agentRows(resolved, open, options).map(scaleRow) : null,
+    agents: agentRows(resolved, open, options).map(scaleRow),
   };
 });
 

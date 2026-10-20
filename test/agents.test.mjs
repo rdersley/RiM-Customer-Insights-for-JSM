@@ -96,7 +96,7 @@ test('AHT per agent and for the team', () => {
   assert.deepEqual([team.handled, team.handlingHours, team.ahtHours], [2, 3.5, 1.8]);
 });
 
-// The resolver: per-agent rows only for Jira admins.
+// The resolver: per-agent rows for every agent, admin or not.
 let admin = false;
 mock.module('@forge/api', {
   namedExports: {
@@ -124,7 +124,7 @@ mock.module('@forge/api', {
 });
 mock.module('@forge/kvs', { namedExports: { kvs: { get: async () => null, set: async () => {}, delete: async () => {} }, WhereConditions: {} } });
 
-test('the resolver sends per-agent rows to Jira admins only', async () => {
+test('the resolver sends per-agent rows to every agent, not only Jira admins', async () => {
   const { handler } = await import('../src/index.js');
   const call = () => handler({ call: { functionKey: 'agentPerformance', payload: { scope: 'internal', projects: ['SD'], startDate: '2026-10-01', endDate: '2026-10-10' } }, context: { accountType: 'licensed' } });
   // Never for customer analyses, admin or not.
@@ -132,10 +132,9 @@ test('the resolver sends per-agent rows to Jira admins only', async () => {
   await assert.rejects(handler({ call: { functionKey: 'agentPerformance', payload: { organization: { id: '188', name: 'Ryanair Crew' }, startDate: '2026-10-01', endDate: '2026-10-10' } }, context: { accountType: 'licensed' } }), /only available on the Internal tab/);
   admin = false;
   const forAgent = await call();
-  assert.equal(forAgent.agents, null);
+  assert.deepEqual(forAgent.agents.map((r) => r.agent.name), ['Ann', 'Bob']);
   assert.equal(forAgent.team.resolved, 4);
   assert.equal(forAgent.team.open, 3);
-  assert.ok(!JSON.stringify(forAgent).includes('Ann'));
   admin = true;
   const forAdmin = await call();
   assert.deepEqual(forAdmin.agents.map((r) => r.agent.name), ['Ann', 'Bob']);
