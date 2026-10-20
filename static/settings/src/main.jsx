@@ -103,7 +103,7 @@ function App() {
       <DeviceSettings value={draft.devices} idChoices={state.idChoices || []} fields={state.fields}
         onChange={(devices) => { setSaved(false); setDraft((d) => ({ ...d, devices })); }} />
 
-      <CrewNumbers headcounts={draft.headcounts || []} organizations={state.organizations || []} breakdowns={state.settings.breakdowns} portalEnabled={draft.portalEnabled === true}
+      <CrewNumbers headcounts={draft.headcounts || []} organizations={state.organizations || []} breakdowns={state.settings.breakdowns} portalEnabled={draft.portalEnabled === true} p1Percent={draft.devices?.p1Percent ?? 20} p2Percent={draft.devices?.p2Percent ?? 5}
         onChange={(headcounts) => { setSaved(false); setDraft((d) => ({ ...d, headcounts })); }} />
 
       <Card title="Spike alerts" description="Once a day, compare each watched organisation’s last 7 days with the 7 before. Patterns that jump show as alerts in Customer Insights.">

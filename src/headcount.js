@@ -103,13 +103,16 @@ export function flyingFromRoster(text, crewTotal) {
   const dateCol = header.findIndex((h) => ['flightdate', 'date', 'dutydate', 'rosterdate'].includes(h));
   const crewCol = header.findIndex((h) => ['crewcode', 'crewid', 'staffnumber', 'employeeid', 'crew'].includes(h));
   if (dateCol < 0 || crewCol < 0) throw new Error('The roster needs a FlightDate column and a CrewCode column.');
+  const flightCol = header.findIndex((h) => ['flightnumber', 'flight', 'flightno'].includes(h));
   const days = new Map();
+  const flights = new Map();
   for (const r of rows.slice(1)) {
     const date = isoDate(r[dateCol]);
     const crew = String(r[crewCol] ?? '').trim().toUpperCase();
     if (!date || !crew) continue;
     if (!days.has(date)) days.set(date, new Set());
     days.get(date).add(crew);
+    if (flightCol >= 0 && r[flightCol]) { if (!flights.has(date)) flights.set(date, new Set()); flights.get(date).add(String(r[flightCol]).trim().toUpperCase()); }
   }
   if (!days.size) throw new Error('No crew found in the roster.');
   const perDay = [...days.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, set]) => ({ date, crew: set.size }));
@@ -117,16 +120,29 @@ export function flyingFromRoster(text, crewTotal) {
   if (!(crewTotal > 0)) throw new Error('Add the crew list first.');
   const share = Math.round((average / crewTotal) * 1000) / 10;
   if (share > 100) throw new Error(`The roster has more crew a day (${Math.round(average)}) than the crew list (${crewTotal}). Is it the right crew list?`);
-  return { share, days: perDay.length, averageCrew: Math.round(average), perDay };
+  // One crew member per flight using the device: flights a day as a share of crew flying.
+  const flightsPerDay = flights.size ? Math.round([...flights.values()].reduce((n, s) => n + s.size, 0) / flights.size) : null;
+  const onePerFlight = flightsPerDay ? Math.min(100, Math.round((flightsPerDay / average) * 1000) / 10) : null;
+  return { share, days: perDay.length, averageCrew: Math.round(average), perDay, flightsPerDay, onePerFlight };
 }
 
-/** A crew list's typical share flying per day, validated (null when not set). */
+const percent = (value) => { const n = Math.round(Number(value) * 10) / 10; return n > 0 && n <= 100 ? n : null; };
+
+/**
+ * A crew list's devices in use a day, validated (null when not set): `share` of
+ * the crew flying a typical day, and `usingShare` of those using (or reporting
+ * on) a device, e.g. one crew member per flight. Both adjustable by an admin.
+ */
 export function sanitizeFlying(input) {
-  const share = Math.round(Number(input?.share) * 10) / 10;
-  if (!(share > 0 && share <= 100)) return null;
+  const share = percent(input?.share);
+  if (!share) return null;
   const days = Number(input?.days);
+  const flights = Number(input?.flightsPerDay);
   return {
     share,
+    usingShare: percent(input?.usingShare) ?? 100,
+    onePerFlight: percent(input?.onePerFlight),
+    flightsPerDay: Number.isInteger(flights) && flights > 0 && flights < 1000000 ? flights : null,
     days: Number.isInteger(days) && days > 0 && days <= 400 ? days : null, // null: typed in by an admin
     source: clip(input?.source, 120),
     updatedAt: ISO_TIME.test(String(input?.updatedAt)) ? String(input.updatedAt) : new Date().toISOString(),
