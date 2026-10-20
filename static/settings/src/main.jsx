@@ -13,6 +13,7 @@ import BackupRestore from './BackupRestore.jsx';
 import BreakdownFields from './BreakdownFields.jsx';
 import PatternSettings from './PatternSettings.jsx';
 import InternalSettings from './InternalSettings.jsx';
+import ReportSections from './ReportSections.jsx';
 import DeviceSettings from './DeviceSettings.jsx';
 import EmailReports from './EmailReports.jsx';
 import CrewNumbers from './CrewNumbers.jsx';
@@ -175,6 +176,8 @@ function App() {
         <p className="nq-muted">Off by default. While it’s off, “Service report” in the portal menu tells customers reports aren’t available, and nothing is published.</p>
       </Card>
 
+      <ReportSections scope="customers" value={draft.hiddenSections} onChange={(hiddenSections) => { setSaved(false); setDraft((d) => ({ ...d, hiddenSections })); }} />
+
       <PdfLogos invoke={invoke} organizations={state.organizations || []} />
 
       <EmailReports invoke={invoke} organizations={state.organizations || []} />
@@ -183,6 +186,8 @@ function App() {
 
       {tab === 'internal' && <InternalSettings draft={draft} fields={state.fields} slaChoices={state.slaChoices || []} invoke={invoke}
         update={(fn) => { setSaved(false); setDraft(fn); }} />}
+
+      {tab === 'internal' && <ReportSections scope="internal" value={draft.hiddenSections} onChange={(hiddenSections) => { setSaved(false); setDraft((d) => ({ ...d, hiddenSections })); }} />}
 
       <ActionBar state={saving ? 'Saving…' : dirty ? 'Unsaved changes' : saved ? 'Saved' : ''}>
         <Button appearance="subtle" disabled={!dirty || saving} onClick={() => { setDraft(state.settings); setSaved(false); }}>Discard</Button>

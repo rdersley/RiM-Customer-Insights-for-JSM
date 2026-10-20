@@ -55,3 +55,6 @@
 /* The Retail inMotion logo in the header, in place of the kit's letter tile. */
 .nq-header .nq-mark:has(.ci-logo) { background: none; box-shadow: none; padding: 0; overflow: visible; }
 .ci-logo { display: block; width: 100%; height: 100%; object-fit: contain; }
+
+/* Report sections */
+.cs-sections { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--nq-space-100) var(--nq-space-200); }

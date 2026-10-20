@@ -50,8 +50,13 @@ export function healthSection(health) {
   };
 }
 
-export function pdfContent({ report, groups = report?.groups || [], ai = null, generatedAt = new Date(), filter = null, crew = null, health = null }) {
+export function pdfContent({ report, groups = report?.groups || [], ai = null, generatedAt = new Date(), filter = null, crew = null, health = null, hidden = report?.hiddenSections || [] }) {
   if (!report) throw new Error('There is no report to export.');
+  // Sections an admin hid (settings → Report sections) are left out of the PDF too.
+  const shown = (key) => !hidden.includes(key);
+  if (!shown('ai')) ai = null;
+  if (!shown('crew')) crew = null;
+  if (!shown('health')) health = null;
   const nameOf = (group, index) => ai?.patterns?.find((p) => p.index === index)?.title || group.theme;
   const whereOf = (group) => (report.breakdownFields || [])
     .map((f) => {
@@ -145,12 +150,12 @@ export function pdfContent({ report, groups = report?.groups || [], ai = null, g
     categories,
     crew: crewSection(crew),
     health: healthSection(health),
-    volume: { points: report.timeSeries || [], unit: (Date.parse(report.endDate) - Date.parse(report.startDate)) / 86400000 < 35 ? 'day' : 'week' },
+    volume: { points: shown('activity') ? report.timeSeries || [] : [], unit: (Date.parse(report.endDate) - Date.parse(report.startDate)) / 86400000 < 35 ? 'day' : 'week' },
     issues,
     moreIssues: Math.max(0, groups.length - PDF_ISSUES),
-    breakdowns,
-    timeOfDay,
-    dataQuality,
+    breakdowns: shown('breakdowns') ? breakdowns : [],
+    timeOfDay: shown('timeOfDay') ? timeOfDay : null,
+    dataQuality: shown('dataQuality') ? dataQuality : [],
   };
 }
 
