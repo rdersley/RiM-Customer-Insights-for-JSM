@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.30.1 (2026-10-20)
+
+- **Fix:** an Internal report for projects without escalation levels or hardware dispatch switched on (e.g. HW) failed: the resolvers return nothing, which reaches the page as an empty object, and the Escalation levels and Hardware dispatch cards (and the PDF) read it as data. They now treat it as switched off. Team performance is guarded the same way.
+
 ## 1.30.0 (2026-10-20)
 
 - **Reports are open to every agent:** per-agent rows in Team performance and refreshing the customer health list no longer need a Jira admin. The settings page (Jira settings → Apps → Customer Insights), email reports, logos, backup and the settings page's spike check stay Jira admin only. Publishing to the customer portal is unchanged (Jira admins and project admins).

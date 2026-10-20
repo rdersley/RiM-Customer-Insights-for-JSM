@@ -23,7 +23,8 @@ function Weekly({ weekly }) {
 export default function DispatchCard({ data, loading, error }) {
   if (loading) return <Card title="Hardware dispatch"><Loading inline text="Reading the dispatch queue and ticket histories…" /></Card>;
   if (error) return <Card title="Hardware dispatch"><Notice kind="error">{error}</Notice></Card>;
-  if (!data) return null;
+  // Not switched on for these projects: the resolver returns nothing, which can arrive as {}.
+  if (!data?.trend) return null;
   const { queue, sent, trend, targetHours: target } = data;
   const growing = trend.net !== null && trend.net > 0;
   return <Card title="Hardware dispatch"

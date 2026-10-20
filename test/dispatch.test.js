@@ -42,3 +42,8 @@ test('dispatch is set per project and only shown when switched on', () => {
   assert.equal(analysisConfig(settings, { scope: 'internal', projects: ['HW'] }).dispatch.deviceFieldId, 'cf_dev');
   assert.equal(analysisConfig(settings, { scope: 'internal', projects: ['SD'] }).dispatch, undefined);
 });
+
+test('an empty answer (dispatch not switched on) is no PDF section', () => {
+  assert.equal(dispatchSection({}), null);
+  assert.equal(dispatchSection(null), null);
+});
