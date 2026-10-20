@@ -13,6 +13,7 @@ import { EffortCard, FlowCard, KnowledgeCard, SlaCard } from './WorkloadCards.js
 import TeamPerformance from './TeamPerformance.jsx';
 import EscalationCard from './EscalationCard.jsx';
 import DispatchCard from './DispatchCard.jsx';
+import { ErrorBoundary, Safe } from './ErrorBoundary.jsx';
 import { HealthBoard, HealthCard } from './HealthCards.jsx';
 import { healthOf } from '../../../src/health.js';
 import ChannelPicker, { useChannel } from './ChannelPicker.jsx';
@@ -899,15 +900,15 @@ function App() {
         </Card>}
       </div>}
 
-      <HealthCard health={health} backlogLoading={flowLoading} includeInPdf={healthInPdf} onIncludeInPdf={setHealthInPdf} />
+      <Safe name="Customer health" resetKey={report}><HealthCard health={health} backlogLoading={flowLoading} includeInPdf={healthInPdf} onIncludeInPdf={setHealthInPdf} /></Safe>
 
-      {shown('flow') && <FlowCard flow={flow} loading={flowLoading} error={flowError} timeOfDay={report.timeOfDay} />}
+      {shown('flow') && <Safe name="Flow and workload" resetKey={report}><FlowCard flow={flow} loading={flowLoading} error={flowError} timeOfDay={report.timeOfDay} /></Safe>}
 
-      {lastQuery?.scope === 'internal' && shown('team') && <TeamPerformance data={team.data} loading={team.loading} error={team.error} />}
+      {lastQuery?.scope === 'internal' && shown('team') && <Safe name="Team performance" resetKey={report}><TeamPerformance data={team.data} loading={team.loading} error={team.error} /></Safe>}
 
-      {lastQuery?.scope === 'internal' && shown('dispatch') && <DispatchCard data={dispatch.data} loading={dispatch.loading} error={dispatch.error} />}
+      {lastQuery?.scope === 'internal' && shown('dispatch') && <Safe name="Hardware dispatch" resetKey={report}><DispatchCard data={dispatch.data} loading={dispatch.loading} error={dispatch.error} /></Safe>}
 
-      {lastQuery?.scope === 'internal' && shown('escalation') && <EscalationCard data={escalation.data} loading={escalation.loading} error={escalation.error} />}
+      {lastQuery?.scope === 'internal' && shown('escalation') && <Safe name="Escalation levels" resetKey={report}><EscalationCard data={escalation.data} loading={escalation.loading} error={escalation.error} /></Safe>}
 
       {!shown('breakdowns') ? null : report.breakdowns?.length > 0
         ? <div className="nq-grid ci-breakdowns">{report.breakdowns.map((b) => {
@@ -936,12 +937,12 @@ function App() {
         : <p className="nq-muted">Tip: a Jira admin can add breakdowns by base, device type or any other field in <strong>Jira settings → Apps → Customer Insights</strong>.</p>}
 
       {!crew && shown('crew') && crewNotCovered.length > 0 && <p className="nq-muted">Tickets per 100 crew isn’t shown: {crewNotCovered.join(', ')} {crewNotCovered.length === 1 ? 'isn’t' : 'aren’t'} in the same crew list as the other organisations. Add {crewNotCovered.length === 1 ? 'it' : 'them'} in Customer Insights settings → Crew numbers, or leave {crewNotCovered.length === 1 ? 'it' : 'them'} out of the analysis.</p>}
-      {crew && <CrewRates rates={crew} approx={crew.estimated ? '≈' : ''} onDrill={(() => {
+      {crew && <Safe name="Tickets per 100 crew" resetKey={report}><CrewRates rates={crew} approx={crew.estimated ? '≈' : ''} onDrill={(() => {
         const field = report.breakdownFields?.find((f) => f.id === headcount.fieldId);
         return field && !filter && canDrill(field, 'x') ? (value) => drill(field, value) : null;
-      })()} />}
+      })()} /></Safe>}
 
-      {report.timeOfDay?.analysed > 0 && shown('timeOfDay') && <WhenTicketsArrive timeOfDay={report.timeOfDay} />}
+      {report.timeOfDay?.analysed > 0 && shown('timeOfDay') && <Safe name="When tickets arrive" resetKey={report}><WhenTicketsArrive timeOfDay={report.timeOfDay} /></Safe>}
 
       {qualityIssues.length > 0 && shown('dataQuality') && <Card
         title="Data quality"
@@ -1021,13 +1022,13 @@ function App() {
           : <EmptyState compact title="No repeated issue patterns detected">There are no groups of similar tickets with more than one request in this period.</EmptyState>}
       </Card>
 
-      {shown('effort') && <EffortCard report={report} groups={groups} nameOf={patternName} />}
+      {shown('effort') && <Safe name="Where the effort goes" resetKey={report}><EffortCard report={report} groups={groups} nameOf={patternName} /></Safe>}
 
-      {shown('devices') && <DevicesCard report={report} groups={groups} nameOf={patternName} headcount={headcount} />}
+      {shown('devices') && <Safe name="Devices affected" resetKey={report}><DevicesCard report={report} groups={groups} nameOf={patternName} headcount={headcount} /></Safe>}
 
-      {shown('sla') && <SlaCard report={report} groups={groups} nameOf={patternName} />}
+      {shown('sla') && <Safe name="SLAs" resetKey={report}><SlaCard report={report} groups={groups} nameOf={patternName} /></Safe>}
 
-      {shown('knowledge') && <KnowledgeCard key={report.baseJql} groups={groups} nameOf={patternName} invoke={invoke} />}
+      {shown('knowledge') && <Safe name="Knowledge gaps" resetKey={report}><KnowledgeCard key={report.baseJql} groups={groups} nameOf={patternName} invoke={invoke} /></Safe>}
 
       {!reportOrgId && report.organizations?.length > 1 && <p className="nq-muted">Portal reports are published for one organisation at a time. Choose a single organisation to prepare one.</p>}
 
@@ -1118,4 +1119,4 @@ function App() {
   </div>;
 }
 
-createRoot(document.getElementById('root')).render(<App />);
+createRoot(document.getElementById('root')).render(<ErrorBoundary page><App /></ErrorBoundary>);
