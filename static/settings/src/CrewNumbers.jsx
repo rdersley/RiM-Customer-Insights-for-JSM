@@ -14,7 +14,7 @@ async function readCrew(file) {
   return crewFromFile(await file.text());
 }
 
-export default function CrewNumbers({ headcounts = [], onChange, organizations = [], breakdowns = [], portalEnabled }) {
+export default function CrewNumbers({ headcounts = [], onChange, organizations = [], breakdowns = [], portalEnabled, p1Percent = 20, p2Percent = 5 }) {
   const [orgFilter, setOrgFilter] = useState('');
   const [picked, setPicked] = useState([]); // organisations for a new crew list
   const [fieldId, setFieldId] = useState('');
@@ -56,7 +56,8 @@ export default function CrewNumbers({ headcounts = [], onChange, organizations =
       if (file.size > 50 * 1024 * 1024) throw new Error('That file is over 50 MB.');
       const crew = headcounts[index].values.reduce((t, v) => t + v.count, 0);
       const result = flyingFromRoster(await file.text(), crew);
-      update(index, { flying: { share: result.share, days: result.days, source: file.name, updatedAt: new Date().toISOString() } });
+      // Keep an adjusted "using a device" share; the roster's one-per-flight figure is offered as a suggestion.
+      update(index, { flying: { ...headcounts[index].flying, share: result.share, days: result.days, flightsPerDay: result.flightsPerDay, onePerFlight: result.onePerFlight, usingShare: headcounts[index].flying?.usingShare ?? 100, source: file.name, updatedAt: new Date().toISOString() } });
     } catch (e) { setError(e.message || 'The roster could not be read.'); }
   }
 
@@ -90,11 +91,20 @@ export default function CrewNumbers({ headcounts = [], onChange, organizations =
             <div className="cs-flying">
               <label htmlFor={`cs-flying-${index}`}>Typical % of crew flying per day</label>
               <input id={`cs-flying-${index}`} className="nq-input cs-number" type="number" min={0.1} max={100} step={0.1} value={h.flying?.share ?? ''} placeholder="e.g. 29"
-                onChange={(e) => update(index, { flying: e.target.value === '' ? null : { share: Number(e.target.value), days: null, source: 'Typed in', updatedAt: new Date().toISOString() } })} />
+                onChange={(e) => update(index, { flying: e.target.value === '' ? null : { ...h.flying, share: Number(e.target.value), days: null, source: 'Typed in', updatedAt: new Date().toISOString() } })} />
+              <label htmlFor={`cs-using-${index}`}>% of them using a device</label>
+              <input id={`cs-using-${index}`} className="nq-input cs-number" type="number" min={0.1} max={100} step={0.1} value={h.flying?.usingShare ?? 100} disabled={!h.flying?.share}
+                onChange={(e) => update(index, { flying: { ...h.flying, usingShare: Number(e.target.value) } })} />
+              {h.flying?.onePerFlight && h.flying.usingShare !== h.flying.onePerFlight && <button type="button" className="nq-btn nq-btn--small"
+                onClick={() => update(index, { flying: { ...h.flying, usingShare: h.flying.onePerFlight } })}>One per flight ({h.flying.onePerFlight}%)</button>}
               <label className="nq-btn nq-btn--small cs-file">Upload roster<input type="file" accept=".csv,.txt" onChange={(e) => roster(index, e.target.files?.[0])} /></label>
             </div>
             <p className="nq-muted">{h.flying?.share
-              ? `Devices in use a day: ${n(Math.round(crew * h.flying.share / 100))} crew flying${h.flying.days ? ` (from ${h.flying.source || 'a roster'}, ${h.flying.days} ${h.flying.days === 1 ? 'day' : 'days'}, ${day(h.flying.updatedAt)})` : ''}. Live surges and reports judge P1/P2 against this.`
+              ? (() => {
+                const flying = Math.round(crew * h.flying.share / 100);
+                const inUse = Math.round(flying * (h.flying.usingShare ?? 100) / 100);
+                return `≈ ${n(inUse)} devices of each type in use a day (${n(flying)} crew flying × ${h.flying.usingShare ?? 100}% using one${h.flying.flightsPerDay ? `; the roster has ${n(h.flying.flightsPerDay)} flights a day` : ''}${h.flying.days ? `, from ${h.flying.source || 'a roster'}, ${h.flying.days} ${h.flying.days === 1 ? 'day' : 'days'}, ${day(h.flying.updatedAt)}` : ''}). Suggested P1 at ${n(Math.ceil(inUse * p1Percent / 100))}+ devices affected, P2 at ${n(Math.ceil(inUse * p2Percent / 100))}+ (Devices settings).`;
+              })()
               : 'Not set: devices are measured against the whole crew list. Upload a roster (one row per crew member per flight) once to work out the typical share flying a day.'}</p>
           </div>
           <div className="nq-inline cs-crew__actions">

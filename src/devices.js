@@ -114,11 +114,15 @@ export function fleetFromCrew(crew, config) {
   return Object.fromEntries((config?.types || []).map((t) => [t.label, Math.round(crew * t.perCrew)]).filter(([, n]) => n > 0));
 }
 
-/** Crew flying on a typical day for a crew list (its roster share), or null. */
+/**
+ * Crew using a device on a typical day for a crew list, or null: crew × the
+ * share flying × the share of those using a device (e.g. one per flight).
+ */
 export function crewFlyingPerDay(headcount) {
   const share = Number(headcount?.flying?.share);
   if (!headcount?.values?.length || !(share > 0)) return null;
-  return Math.round(headcount.values.reduce((n, v) => n + v.count, 0) * (share / 100));
+  const using = Number(headcount.flying.usingShare) > 0 ? Number(headcount.flying.usingShare) : 100;
+  return Math.round(headcount.values.reduce((n, v) => n + v.count, 0) * (share / 100) * (using / 100));
 }
 
 /**
