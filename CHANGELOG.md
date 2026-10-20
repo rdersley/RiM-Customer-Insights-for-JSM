@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.24.0 (2026-10-20)
+
+- **Present to a client:** a button in the page header. Choose the customer and, until you press Stop presenting, the page shows only them: the organisation picker is locked to them, alerts are only theirs, and the customer health list, the report's health card (and its PDF section) and the Internal tab are hidden. Any report already on screen is cleared when you start. Kept in this browser only; other agents see the normal page and no settings change.
+
 ## 1.23.0 (2026-10-20)
 
 - **Report sections:** Settings → Customers and Settings → Internal each have a Report sections card to show or hide any section of the report: AI summary, ticket activity, what stands out, customer health, flow and workload, team performance, escalation levels, breakdowns, tickets per 100 crew, when tickets arrive, data quality, where the effort goes, devices affected, SLAs, knowledge gaps and the customer portal card. Hidden sections are left out of the page, downloaded PDFs and emailed PDFs, and their data isn't fetched. Headline numbers and issue patterns always show. Customer portal reports are unchanged.
