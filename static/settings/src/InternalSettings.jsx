@@ -83,6 +83,20 @@ export default function InternalSettings({ draft, update, fields, slaChoices, in
             </div>
           </Field>}
         </div>
+        {/* Escalation levels and hardware dispatch are set per project: show where they are. */}
+        {!profile && profiles.length > 0 && <div className="nq-table-wrap">
+          <table className="nq-table cs-profiles">
+            <thead><tr><th>Project settings</th><th>Projects</th><th>Escalation levels</th><th>Hardware dispatch</th><th /></tr></thead>
+            <tbody>{profiles.map((p) => <tr key={p.id}>
+              <td><strong>{p.name}</strong></td>
+              <td>{p.projects.join(', ') || '–'}</td>
+              <td>{p.escalation?.enabled ? 'On' : 'Off'}</td>
+              <td>{p.dispatch?.enabled ? `On, ${p.dispatch.targetHours || 48} h target` : 'Off'}</td>
+              <td><Button small onClick={() => setSelected(p.id)}>Open</Button></td>
+            </tr>)}</tbody>
+          </table>
+        </div>}
+        {!profile && <p className="nq-muted">Escalation levels and Hardware dispatch are set for a project, not here: open its settings above, or add settings for it (for example “Hardware” with HW) to switch them on.</p>}
         {profile && <>
           <Field label="Name" htmlFor="cs-profile-name">
             <input id="cs-profile-name" className="nq-input" maxLength={60} value={profile.name} onChange={(e) => setProfile({ name: e.target.value })} />
