@@ -1,11 +1,13 @@
-// Settings → Internal → SLAs: which JSM SLA fields reports measure.
+// Settings → SLAs: which JSM SLA fields reports measure (customer reports,
+// internal reports, or a project's internal reports). None ticked: no SLA section.
 import React from 'react';
 import { Card } from '@retailinmotion/ui/react';
 import { MAX_SLA_FIELDS } from '../../../src/sla.js';
 
 export default function SlaSettings({ value = [], choices = [], onChange, scope = 'default' }) {
   const chosen = value.map((x) => x.id ?? x);
-  return <Card title="SLAs" description={`${scope === 'project' ? 'Internal reports for these projects' : 'Customer reports, and internal reports without project settings,'} show how tickets did against these service project SLAs: the share met, the recurring issues that breach most, and the breakdown values (such as teams) with the highest breach rate. Up to ${MAX_SLA_FIELDS}.`}>
+  const who = { project: 'Internal reports for these projects', customers: 'Customer reports', default: 'Internal reports without project settings' }[scope] || 'Reports';
+  return <Card title="SLAs" description={`${who} show how tickets did against these service project SLAs: the share met, the recurring issues that breach most, and the breakdown values with the highest breach rate. Up to ${MAX_SLA_FIELDS}. Tick none to leave SLAs out.`}>
     {choices.length
       ? <div className="cs-orgs">{choices.map((f) => {
         const on = chosen.includes(f.id);

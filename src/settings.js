@@ -142,7 +142,8 @@ function internalPatternsOf(ip = {}) {
 export function analysisConfig(settings, payload) {
   const s = { ...DEFAULT_SETTINGS, ...settings };
   if (payload?.scope !== 'internal') {
-    return { profile: null, breakdowns: s.breakdowns || [], clientFields: [], slaFields: s.slaFields || [], patterns: patternSettingsFor(s, false) };
+    // Customer reports have their own SLAs; settings saved before 1.26 shared the internal list.
+    return { profile: null, breakdowns: s.breakdowns || [], clientFields: [], slaFields: s.customerSlaFields ?? s.slaFields ?? [], patterns: patternSettingsFor(s, false) };
   }
   const projects = (Array.isArray(payload?.projects) ? payload.projects : []).map((k) => String(k).toUpperCase());
   const owners = projects.map((k) => (s.projectProfiles || []).find((p) => p.projects.includes(k)) || null);
@@ -252,7 +253,7 @@ export function sanitizeSettings(input, selectable, organizations = [], { slaCho
   // Statuses that count as handling time (AHT); empty means "in progress" ones that aren't waiting.
   const handlingStatuses = [...new Set((Array.isArray(input?.handlingStatuses) ? input.handlingStatuses : String(input?.handlingStatuses ?? '').split(/[\n,]/))
     .map((n) => clip(n, 60)).filter(Boolean))].slice(0, 30);
-  return { breakdowns, internalBreakdowns, internalPatterns, projectProfiles, handlingStatuses, channelField: sanitizeChannelField(input?.channelField, selectable), devices: sanitizeDevices(input?.devices, { idChoices, selectable }), slaFields: slaFieldList(input?.slaFields, slaChoices), clientFields: clientFieldList(input?.clientFields, selectable), headcounts: sanitizeHeadcounts(input?.headcounts, organizations, breakdowns), portalEnabled: input?.portalEnabled === true, minPatternSize: patternMinimum(input?.minPatternSize), placeholders: placeholderList(input?.placeholders), synonyms: synonymList(input?.synonyms), alerts: sanitizeAlerts(input?.alerts, organizations), surge: sanitizeSurge(input?.surge, organizations, breakdowns, selectable), health: sanitizeHealth(input?.health, organizations), hiddenSections: sanitizeHiddenSections(input?.hiddenSections) };
+  return { breakdowns, internalBreakdowns, internalPatterns, projectProfiles, handlingStatuses, channelField: sanitizeChannelField(input?.channelField, selectable), devices: sanitizeDevices(input?.devices, { idChoices, selectable }), slaFields: slaFieldList(input?.slaFields, slaChoices), customerSlaFields: slaFieldList(input?.customerSlaFields === undefined ? input?.slaFields : input.customerSlaFields, slaChoices), clientFields: clientFieldList(input?.clientFields, selectable), headcounts: sanitizeHeadcounts(input?.headcounts, organizations, breakdowns), portalEnabled: input?.portalEnabled === true, minPatternSize: patternMinimum(input?.minPatternSize), placeholders: placeholderList(input?.placeholders), synonyms: synonymList(input?.synonyms), alerts: sanitizeAlerts(input?.alerts, organizations), surge: sanitizeSurge(input?.surge, organizations, breakdowns, selectable), health: sanitizeHealth(input?.health, organizations), hiddenSections: sanitizeHiddenSections(input?.hiddenSections) };
 }
 
 const quote = (v) => `"${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
