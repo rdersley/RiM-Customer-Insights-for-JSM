@@ -102,7 +102,25 @@ function JiraLink({ href, className, children }) {
   return <a className={className} href={href} target="_blank" rel="noreferrer" onClick={(e) => { e.preventDefault(); router.open(href); }}>{children}</a>;
 }
 function App() {
-  const [orgs, setOrgs] = useState([]);
+  const [allOrgs, setOrgs] = useState([]);
+  // "Present to a client": while presenting, the page shows only that customer
+  // (no other customers' alerts, health scores or names, no Internal tab).
+  // Remembered in this browser only; other agents see the normal page.
+  const PRESENT_KEY = 'ci-presenting';
+  const [presenting, setPresenting] = useState(() => { try { return JSON.parse(localStorage.getItem(PRESENT_KEY) || 'null'); } catch { return null; } });
+  const [presentPick, setPresentPick] = useState(null); // org id while choosing, '' when the picker is open
+  const orgs = presenting ? allOrgs.filter((o) => o.id === presenting.id) : allOrgs;
+  function startPresenting(org) {
+    const value = { id: org.id, name: org.name };
+    try { localStorage.setItem(PRESENT_KEY, JSON.stringify(value)); } catch { /* storage unavailable: this visit only */ }
+    setPresenting(value); setPresentPick(null); setMode('customers'); setOrgIds([org.id]);
+    // Clear any report already on screen (it may be another customer's).
+    setReport(null); setAi(null); setFlow(null);
+  }
+  function stopPresenting() {
+    try { localStorage.removeItem(PRESENT_KEY); } catch { /* storage unavailable */ }
+    setPresenting(null);
+  }
   const [orgIds, setOrgIds] = useState([]); // selected organisations; the first is the main one
   const [from, setFrom] = useState(DEFAULT_RANGE.from);
   const [to, setTo] = useState(DEFAULT_RANGE.to);
@@ -167,7 +185,7 @@ function App() {
       const list = result?.organizations || [];
       setLicensed(result?.licensed !== false);
       setOrgs(list);
-      if (list.length) setOrgIds([String(list[0].id)]);
+      if (list.length) setOrgIds([String((presenting && list.find((o) => String(o.id) === presenting.id)) ? presenting.id : list[0].id)]);
       if (result?.licensed !== false) {
         invoke('getAlerts').then((a) => setAlerts(a?.alerts || [])).catch(() => {});
         invoke('getHealthBoard').then(setHealthBoard).catch(() => {});
@@ -182,8 +200,9 @@ function App() {
     const timer = setInterval(() => { invoke('getAlerts').then((a) => setAlerts(a?.alerts || [])).catch(() => {}); }, 120000);
     return () => clearInterval(timer);
   }, [licensed]);
-  const surges = alerts.filter((a) => a.kind === 'surge');
-  const spikes = alerts.filter((a) => a.kind !== 'surge');
+  const shownAlerts = presenting ? alerts.filter((a) => a.organization?.id === presenting.id) : alerts;
+  const surges = shownAlerts.filter((a) => a.kind === 'surge');
+  const spikes = shownAlerts.filter((a) => a.kind !== 'surge');
 
   // "Analyse" on an alert fills in the form; the run starts once the choices apply.
   useEffect(() => {
@@ -334,7 +353,7 @@ function App() {
   // Customer health for customer reports (not internal ones or drill-downs); the backlog arrives with the flow counts.
   // Report sections an admin hid (settings → Report sections).
   const shown = (key) => !(report?.hiddenSections || []).includes(key);
-  const health = report && shown('health') && lastQuery?.scope !== 'internal' && !report.filter ? healthOf(report, flow?.backlog || null) : null;
+  const health = report && shown('health') && !presenting && lastQuery?.scope !== 'internal' && !report.filter ? healthOf(report, flow?.backlog || null) : null;
   useEffect(() => {
     setPublication(null); setDraft(null); setPublishError('');
     if (!report || !reportOrgId) return;
@@ -625,11 +644,27 @@ function App() {
       product={PRODUCT}
       subtitle="See recurring issues and what’s changing across a customer’s tickets."
       version={version}
-      actions={report && <>
-        <Button onClick={downloadPdf} disabled={pdfBusy}>{pdfBusy ? 'Creating PDF…' : 'Export PDF'}</Button>
-        <Button onClick={exportCsv}>Export CSV</Button>
+      actions={<>
+        {report && <Button onClick={downloadPdf} disabled={pdfBusy}>{pdfBusy ? 'Creating PDF…' : 'Export PDF'}</Button>}
+        {report && <Button onClick={exportCsv}>Export CSV</Button>}
+        {licensed && (presenting
+          ? <Button appearance="subtle" onClick={stopPresenting}>Stop presenting</Button>
+          : <Button appearance="subtle" onClick={() => setPresentPick(selectedOrg?.id || '')}>Present to a client</Button>)}
       </>}
     />
+
+    {presentPick !== null && !presenting && <Card title="Present to a client" description="Show only one customer while you share your screen: other customers’ alerts, health scores and names are hidden, and so is the Internal tab. Only in this browser, until you stop presenting.">
+      <div className="nq-filters">
+        <Field label="Customer" htmlFor="ci-present-org">
+          <select id="ci-present-org" className="nq-select" value={presentPick} onChange={(e) => setPresentPick(e.target.value)}>
+            <option value="">Choose a customer…</option>
+            {allOrgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+          </select>
+        </Field>
+        <Button appearance="primary" disabled={!presentPick} onClick={() => startPresenting(allOrgs.find((o) => o.id === presentPick))}>Start presenting</Button>
+        <Button appearance="subtle" onClick={() => setPresentPick(null)}>Cancel</Button>
+      </div>
+    </Card>}
 
     {!licensed && <Notice kind="warning" title="Customer Insights isn’t licensed on this site">
       Analysis is unavailable until the app has an active Marketplace licence. Ask a Jira admin to check it in Manage apps.
@@ -678,10 +713,10 @@ function App() {
       </li>)}</ul>
     </Card>}
 
-    {licensed && <HealthBoard board={healthBoard} onAnalyse={analyseHealth} canAnalyse={(row) => Boolean(row.period) && !loadingReport && orgs.some((o) => o.id === row.organization.id)} />}
+    {licensed && !presenting && <HealthBoard board={healthBoard} onAnalyse={analyseHealth} canAnalyse={(row) => Boolean(row.period) && !loadingReport && orgs.some((o) => o.id === row.organization.id)} />}
 
     {licensed && <Card>
-      <div className="ci-mode"><Tabs items={[{ id: 'customers', label: 'Customers' }, { id: 'internal', label: 'Internal' }]} active={mode} onChange={setMode} /></div>
+      {!presenting && <div className="ci-mode"><Tabs items={[{ id: 'customers', label: 'Customers' }, { id: 'internal', label: 'Internal' }]} active={mode} onChange={setMode} /></div>}
       {internal ? <form className="nq-filters ci-filters" onSubmit={runAnalysis}>
         <Field label={`Projects (${internalProjects.length})`} htmlFor="ci-int-projects">
           <select id="ci-int-projects" className="nq-select" value="" disabled={!projectList}
