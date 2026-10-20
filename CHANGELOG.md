@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.23.0 (2026-10-20)
+
+- **Report sections:** Settings → Customers and Settings → Internal each have a Report sections card to show or hide any section of the report: AI summary, ticket activity, what stands out, customer health, flow and workload, team performance, escalation levels, breakdowns, tickets per 100 crew, when tickets arrive, data quality, where the effort goes, devices affected, SLAs, knowledge gaps and the customer portal card. Hidden sections are left out of the page, downloaded PDFs and emailed PDFs, and their data isn't fetched. Headline numbers and issue patterns always show. Customer portal reports are unchanged.
+
 ## 1.22.0 (2026-10-16)
 
 - **Customer health score:** a 0–100 score (Healthy 75+, Watch 50–74, At risk under 50) from five signals, each scored 0–100 and weighted: ticket volume against the previous period (20%), share of tickets in rising or new issues (20%), SLAs met (25%), open tickets over 30 days old (20%) and customer satisfaction (15%). Signals without enough data are left out and the rest weighted up. Internal only: never on the portal or sent to customers.

@@ -274,12 +274,19 @@ function App() {
       const result = await invoke('analyze', query);
       setReport(result);
       setLastQuery(query);
-      setFlowLoading(true);
-      invoke('analyzeFlow', query).then(setFlow).catch((e) => setFlowError(e.message || 'Flow counts failed.')).finally(() => setFlowLoading(false));
+      // Sections an admin hid (settings → Report sections) aren't worked out.
+      const hidden = result.hiddenSections || [];
+      // The health score needs the open backlog from the flow counts.
+      if (!hidden.includes('flow') || (!internal && !hidden.includes('health'))) {
+        setFlowLoading(true);
+        invoke('analyzeFlow', query).then(setFlow).catch((e) => setFlowError(e.message || 'Flow counts failed.')).finally(() => setFlowLoading(false));
+      }
       // Team performance is for internal analyses only.
-      if (internal) {
+      if (internal && !hidden.includes('team')) {
         setTeam({ data: null, loading: true, error: '' });
         invoke('agentPerformance', query).then((data) => setTeam({ data, loading: false, error: '' })).catch((e) => setTeam({ data: null, loading: false, error: e.message || 'Team performance couldn’t be worked out.' }));
+      }
+      if (internal && !hidden.includes('escalation')) {
         setEscalation({ data: null, loading: true, error: '' });
         invoke('escalation', query).then((data) => setEscalation({ data, loading: false, error: '' })).catch((e) => setEscalation({ data: null, loading: false, error: e.message || 'Escalation levels couldn’t be worked out.' }));
       }
@@ -325,7 +332,9 @@ function App() {
   // Portal reports are for one organisation, so publishing needs a single-organisation analysis.
   const reportOrgId = lastQuery?.organizations?.length > 1 ? null : lastQuery?.organization?.id;
   // Customer health for customer reports (not internal ones or drill-downs); the backlog arrives with the flow counts.
-  const health = report && lastQuery?.scope !== 'internal' && !report.filter ? healthOf(report, flow?.backlog || null) : null;
+  // Report sections an admin hid (settings → Report sections).
+  const shown = (key) => !(report?.hiddenSections || []).includes(key);
+  const health = report && shown('health') && lastQuery?.scope !== 'internal' && !report.filter ? healthOf(report, flow?.backlog || null) : null;
   useEffect(() => {
     setPublication(null); setDraft(null); setPublishError('');
     if (!report || !reportOrgId) return;
@@ -343,7 +352,7 @@ function App() {
     invoke('getHeadcount', { orgIds: analysedOrgIds }).then((r) => setCrewLookup({ headcount: r?.headcount || null, covered: r?.covered || [] })).catch(() => {});
   }, [report?.organization, analysedOrgIds.join(',')]);
   const headcount = crewLookup.headcount;
-  const crew = report && headcount ? crewRates(report, headcount) : null;
+  const crew = report && headcount && !(report.hiddenSections || []).includes('crew') ? crewRates(report, headcount) : null;
   const orgName = (id) => lastQuery?.organizations?.find((o) => String(o.id) === id)?.name || lastQuery?.organization?.name;
   const crewNotCovered = !headcount && crewLookup.covered.length ? analysedOrgIds.filter((id) => !crewLookup.covered.includes(id)).map(orgName) : [];
 
@@ -801,7 +810,7 @@ function App() {
         {report.resolution && <Kpi icon="◷" kind="info" label="Median time to resolve" value={duration(report.resolution.medianHours)} hint={report.resolution.openShare ? `${report.resolution.openShare}% still open` : 'all resolved'} />}
       </div>
 
-      {groups.length > 0 && <Card
+      {groups.length > 0 && shown('ai') && <Card
         title="AI summary"
         description="Atlassian-hosted Claude. Ticket text stays on the Atlassian platform."
         actions={<Button appearance={ai ? 'default' : 'primary'} small onClick={runAi} disabled={aiLoading}>{aiLoading ? 'Summarising…' : ai ? 'Regenerate' : 'Summarise with AI'}</Button>}
@@ -820,8 +829,8 @@ function App() {
         </div>}
       </Card>}
 
-      <div className="nq-grid ci-split">
-        <Card title="Ticket activity" description="Volume over time" actions={<span className="nq-pill nq-pill--neutral">{report.startDate} – {report.endDate}</span>}>
+      {(shown('activity') || shown('standsOut')) && <div className="nq-grid ci-split">
+        {shown('activity') && <Card title="Ticket activity" description="Volume over time" actions={<span className="nq-pill nq-pill--neutral">{report.startDate} – {report.endDate}</span>}>
           {report.timeSeries.length
             ? <div className="ci-chart">
               <div className="ci-chart__axis"><span>{graphMax}</span><span>{Math.ceil(graphMax / 2)}</span><span>0</span></div>
@@ -833,9 +842,9 @@ function App() {
               </div>
             </div>
             : <EmptyState compact title="No tickets were created in this period." />}
-        </Card>
+        </Card>}
 
-        <Card title="What stands out" description="Quick read" footer={<span className="nq-muted">Patterns are based on matching ticket text. Review the examples before drawing conclusions.</span>}>
+        {shown('standsOut') && <Card title="What stands out" description="Quick read" footer={<span className="nq-muted">Patterns are based on matching ticket text. Review the examples before drawing conclusions.</span>}>
           {groups.length
             ? <ol className="ci-insights">{groups.slice(0, 3).map((g, index) => <li key={g.id}>
               <div>
@@ -845,18 +854,18 @@ function App() {
               <span className="ci-insights__count">{g.estimated ? '≈' : ''}{g.count}</span>
             </li>)}</ol>
             : <EmptyState compact title="No repeated patterns found in these tickets yet." />}
-        </Card>
-      </div>
+        </Card>}
+      </div>}
 
       <HealthCard health={health} backlogLoading={flowLoading} includeInPdf={healthInPdf} onIncludeInPdf={setHealthInPdf} />
 
-      <FlowCard flow={flow} loading={flowLoading} error={flowError} timeOfDay={report.timeOfDay} />
+      {shown('flow') && <FlowCard flow={flow} loading={flowLoading} error={flowError} timeOfDay={report.timeOfDay} />}
 
-      {lastQuery?.scope === 'internal' && <TeamPerformance data={team.data} loading={team.loading} error={team.error} />}
+      {lastQuery?.scope === 'internal' && shown('team') && <TeamPerformance data={team.data} loading={team.loading} error={team.error} />}
 
-      {lastQuery?.scope === 'internal' && <EscalationCard data={escalation.data} loading={escalation.loading} error={escalation.error} />}
+      {lastQuery?.scope === 'internal' && shown('escalation') && <EscalationCard data={escalation.data} loading={escalation.loading} error={escalation.error} />}
 
-      {report.breakdowns?.length > 0
+      {!shown('breakdowns') ? null : report.breakdowns?.length > 0
         ? <div className="nq-grid ci-breakdowns">{report.breakdowns.map((b) => {
           const top = Math.max(1, ...b.values.map((v) => v.count));
           const field = report.breakdownFields?.find((f) => f.id === b.id) || b;
@@ -882,15 +891,15 @@ function App() {
         })}</div>
         : <p className="nq-muted">Tip: a Jira admin can add breakdowns by base, device type or any other field in <strong>Jira settings → Apps → Customer Insights</strong>.</p>}
 
-      {!crew && crewNotCovered.length > 0 && <p className="nq-muted">Tickets per 100 crew isn’t shown: {crewNotCovered.join(', ')} {crewNotCovered.length === 1 ? 'isn’t' : 'aren’t'} in the same crew list as the other organisations. Add {crewNotCovered.length === 1 ? 'it' : 'them'} in Customer Insights settings → Crew numbers, or leave {crewNotCovered.length === 1 ? 'it' : 'them'} out of the analysis.</p>}
+      {!crew && shown('crew') && crewNotCovered.length > 0 && <p className="nq-muted">Tickets per 100 crew isn’t shown: {crewNotCovered.join(', ')} {crewNotCovered.length === 1 ? 'isn’t' : 'aren’t'} in the same crew list as the other organisations. Add {crewNotCovered.length === 1 ? 'it' : 'them'} in Customer Insights settings → Crew numbers, or leave {crewNotCovered.length === 1 ? 'it' : 'them'} out of the analysis.</p>}
       {crew && <CrewRates rates={crew} approx={crew.estimated ? '≈' : ''} onDrill={(() => {
         const field = report.breakdownFields?.find((f) => f.id === headcount.fieldId);
         return field && !filter && canDrill(field, 'x') ? (value) => drill(field, value) : null;
       })()} />}
 
-      {report.timeOfDay?.analysed > 0 && <WhenTicketsArrive timeOfDay={report.timeOfDay} />}
+      {report.timeOfDay?.analysed > 0 && shown('timeOfDay') && <WhenTicketsArrive timeOfDay={report.timeOfDay} />}
 
-      {qualityIssues.length > 0 && <Card
+      {qualityIssues.length > 0 && shown('dataQuality') && <Card
         title="Data quality"
         description={`Breakdown fields left empty or set to a placeholder such as “Unknown”. ${qualityIssues.some((d) => d.estimated) ? 'Estimated from the sample.' : 'All tickets in the period.'}`}
       >
@@ -968,17 +977,17 @@ function App() {
           : <EmptyState compact title="No repeated issue patterns detected">There are no groups of similar tickets with more than one request in this period.</EmptyState>}
       </Card>
 
-      <EffortCard report={report} groups={groups} nameOf={patternName} />
+      {shown('effort') && <EffortCard report={report} groups={groups} nameOf={patternName} />}
 
-      <DevicesCard report={report} groups={groups} nameOf={patternName} headcount={headcount} />
+      {shown('devices') && <DevicesCard report={report} groups={groups} nameOf={patternName} headcount={headcount} />}
 
-      <SlaCard report={report} groups={groups} nameOf={patternName} />
+      {shown('sla') && <SlaCard report={report} groups={groups} nameOf={patternName} />}
 
-      <KnowledgeCard key={report.baseJql} groups={groups} nameOf={patternName} invoke={invoke} />
+      {shown('knowledge') && <KnowledgeCard key={report.baseJql} groups={groups} nameOf={patternName} invoke={invoke} />}
 
       {!reportOrgId && report.organizations?.length > 1 && <p className="nq-muted">Portal reports are published for one organisation at a time. Choose a single organisation to prepare one.</p>}
 
-      {reportOrgId && publication?.portalEnabled !== false && <Card
+      {reportOrgId && shown('portal') && publication?.portalEnabled !== false && <Card
         title="Customer portal"
         description={`What ${report.organization}'s portal users see under “Service report” in their user menu.`}
         actions={publication?.canPublish && !draft && <>

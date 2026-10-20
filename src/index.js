@@ -15,6 +15,7 @@ import { headcountFor, orgsOf } from './headcount.js';
 import { isLive, liveConfigFrom } from './live.js';
 import { queueAlertCheck, queueEmail, queueHealth, queueRefresh } from './liveJobs.js';
 import { changeOver } from './health.js';
+import { hiddenFor } from './sections.js';
 import { allClientFields, analysisConfig, autoInternalBreakdowns, organisationBreakdown, sanitizeSettings, selectableFields } from './settings.js';
 import { problemFields, problemRequest, relatesLinkType } from './problem.js';
 import { slaFieldChoices, slaState } from './sla.js';
@@ -213,7 +214,8 @@ define('analyze', async ({ payload, context }) => {
   // Resolvers are killed at 25s; runAnalysis stops starting new fetches after the budget.
   const satisfactionId = await satisfactionField('user');
   const report = await runAnalysis(query, { breakdowns, minPatternSize, placeholders, synonyms, slaFields: config.slaFields, devices: settings.devices, channelField: settings.channelField || null, satisfactionId, mode: 'user', budgetMs: FETCH_BUDGET_MS });
-  return { ...report, settingsUsed: payload?.scope === 'internal' ? { profile: config.profile, mixed: Boolean(config.mixed) } : null };
+  // Sections an admin hid for this kind of report (settings → Report sections).
+  return { ...report, hiddenSections: hiddenFor(settings.hiddenSections, payload), settingsUsed: payload?.scope === 'internal' ? { profile: config.profile, mixed: Boolean(config.mixed) } : null };
 });
 
 // Flow and workload planning (src/flow.js), separate from analyze so it gets its

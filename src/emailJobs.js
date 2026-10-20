@@ -8,6 +8,7 @@ import { applyMerges, categoriesOf } from './analysis.js';
 import { suggestCategories, suggestMerges, summarise } from './ai.js';
 import { crewRates, headcountFor } from './headcount.js';
 import { healthOf } from './health.js';
+import { hiddenFor } from './sections.js';
 import { pdfContent, pdfFileName } from './pdfReport.js';
 import { buildPdf } from '../static/app/src/exportPdf.js';
 import { emailMessage, periodFor } from './email.js';
@@ -24,8 +25,10 @@ export async function schedulePdf(schedule, settings, now = new Date(), { intern
     breakdowns: settings.breakdowns || [], ...config.patterns, slaFields: config.slaFields, devices: settings.devices, channelField: settings.channelField || null,
     satisfactionId: await satisfactionField('app'), mode: 'app', budgetMs: 240000,
   });
+  // Emailed reports leave out the sections hidden for customer reports.
+  const hidden = hiddenFor(settings.hiddenSections, payload);
   let ai = null;
-  if (schedule.ai && report.groups.length) {
+  if (schedule.ai && !hidden.includes('ai') && report.groups.length) {
     let groups = report.groups;
     try { groups = applyMerges(report.groups, (await suggestMerges(report)).merges); } catch (error) { console.log(`email: AI merge skipped: ${error.message}`); }
     let categories = [];
@@ -36,8 +39,8 @@ export async function schedulePdf(schedule, settings, now = new Date(), { intern
   const crew = headcount ? crewRates(report, headcount) : null;
   const [company, customer] = await Promise.all([storage.loadLogo('company'), schedule.organizations.length === 1 ? storage.loadLogo(schedule.organizations[0].id) : null]);
   // The health score only goes to internal staff (a schedule with no customer recipients).
-  const health = internal ? healthOf(report, await backlogFor(query, 'app')) : null;
-  const content = pdfContent({ report, groups: ai?.groups || report.groups, ai, crew, health, generatedAt: now });
+  const health = internal && !hidden.includes('health') ? healthOf(report, await backlogFor(query, 'app')) : null;
+  const content = pdfContent({ report, groups: ai?.groups || report.groups, ai, crew, health, hidden, generatedAt: now });
   const doc = buildPdf(jsPDF, content, { product: 'Customer Insights', logos: { company, customer } });
   return {
     from, to,
