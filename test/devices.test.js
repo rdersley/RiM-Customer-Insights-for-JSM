@@ -34,8 +34,8 @@ test('devices from tickets: distinct IDs by type, several IDs in one field', () 
     ticket('A-4', 'pinpad', 'BP-1', 'Bluepad'),
     ticket('A-5', 'no device', '', 'vPos Device'),
   ];
-  assert.deepEqual(devicesAffected(issues, config), { any: 3, byType: { vPOS: 2, 'Card reader': 1 } });
-  assert.deepEqual(devicesAffected(issues, { ...config, idFieldId: '' }), { any: 0, byType: {} });
+  assert.deepEqual(devicesAffected(issues, config), { any: 3, byType: { vPOS: 2, 'Card reader': 1 }, peak: { vPOS: 2, 'Card reader': 1 } });
+  assert.deepEqual(devicesAffected(issues, { ...config, idFieldId: '' }), { any: 0, byType: {}, peak: {} });
 });
 
 test('share of the fleet from crew numbers, and the suggested priority', () => {
@@ -52,7 +52,7 @@ test('share of the fleet from crew numbers, and the suggested priority', () => {
 test('reports count devices per recurring issue', () => {
   const issues = ['VP-1', 'VP-2', 'VP-3'].map((id, i) => ticket(`S-${i}`, 'vPOS sync failing at base', id, 'vPos Device', `2026-10-0${i + 2}T08:00:00Z`));
   const report = buildReport(issues, '2026-10-01', '2026-10-10', null, { devices: config });
-  assert.deepEqual(report.devices, { any: 3, byType: { vPOS: 3 } });
+  assert.deepEqual(report.devices, { any: 3, byType: { vPOS: 3 }, peak: { vPOS: 1 } }); // one a day
   assert.deepEqual(report.groups[0].devices.byType, { vPOS: 3 });
   assert.equal(report.deviceConfig.p1Percent, 20);
   assert.equal(buildReport(issues, '2026-10-01', '2026-10-10', null, {}).devices, null);

@@ -58,3 +58,7 @@
 
 /* Report sections */
 .cs-sections { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--nq-space-100) var(--nq-space-200); }
+
+/* Crew flying per day (roster) */
+.cs-flying { display: flex; flex-wrap: wrap; align-items: center; gap: var(--nq-space-100); margin-top: var(--nq-space-075, 6px); }
+.cs-flying .cs-number { width: 90px; }

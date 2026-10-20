@@ -7,7 +7,7 @@
 // with the matching tickets linked. Later tickets on the same surge are added
 // to that ticket instead of raising another.
 import { groupIssues } from './analysis.js';
-import { deviceImpact, devicesAffected, fleetFromCrew, impactText } from './devices.js';
+import { deviceImpact, devicesAffected, fleetForHeadcount, impactText } from './devices.js';
 import { headcountFor } from './headcount.js';
 
 export const SURGE_LIMITS = {
@@ -205,7 +205,8 @@ export async function checkSurges(organization, settings, { jira, store, now = D
   // Devices affected: the device fields, and the fleet from this organisation's crew numbers.
   const deviceConfig = settings.devices?.idFieldId ? settings.devices : null;
   const headcount = deviceConfig ? headcountFor(settings.headcounts, [organization.id]) : null;
-  const fleet = headcount ? fleetFromCrew(headcount.values.reduce((n, v) => n + v.count, 0), deviceConfig) : {};
+  // Devices in use today (crew flying on a typical day) when the crew list has a roster share, else the whole fleet.
+  const { fleet } = fleetForHeadcount(headcount, deviceConfig);
   const deviceFields = deviceConfig ? [deviceConfig.idFieldId, deviceConfig.typeFieldId].filter(Boolean).map((id) => ({ id, kind: null })) : [];
   const extra = [...breakdowns, ...config.copyFields.map((f) => ({ id: f.id, kind: null })), ...deviceFields];
   const issues = await jira.search(`${orgClause} AND created >= "-${config.windowMinutes}m"`, MAX_FETCH, extra);

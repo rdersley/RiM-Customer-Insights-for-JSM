@@ -1,8 +1,11 @@
 // Devices affected: how many distinct devices (by a device ID / serial field)
 // a set of tickets is about, by device type, against the size of the fleet. The
-// fleet comes from crew numbers for now (devices per crew member, e.g. one vPOS
-// and one card reader each). The share of the fleet affected suggests a priority
-// (P1/P2) from admin thresholds; agents decide.
+// fleet comes from crew numbers (devices per crew member, e.g. one vPOS and one
+// card reader each). The Ryanair contract measures P1/P2 against the devices in
+// use THAT DAY, so when a crew list has a typical share of crew flying per day
+// (from a roster upload), the fleet is the crew flying that day and reports use
+// each issue's worst single day. The share suggests a priority from admin
+// thresholds; agents decide.
 
 export const DEVICE_LIMITS = { types: 10, values: 20, p1: { min: 1, max: 100, default: 20 }, p2: { min: 1, max: 100, default: 5 } };
 export const DEFAULT_DEVICE_TYPES = [
@@ -76,15 +79,21 @@ export function deviceOf(issue, config) {
 export function devicesAffected(issues, config) {
   const byType = {};
   const all = new Set();
+  const days = {}; // { date: { type: Set } } for the worst single day
   for (const issue of issues || []) {
     const { ids, type } = deviceOf(issue, config);
+    const date = String(issue?.fields?.created || '').slice(0, 10);
     for (const id of ids) {
       all.add(id);
       const key = type || 'Other';
       (byType[key] = byType[key] || new Set()).add(id);
+      if (date) ((days[date] ||= {})[key] ||= new Set()).add(id);
     }
   }
-  return { any: all.size, byType: Object.fromEntries(Object.entries(byType).map(([k, v]) => [k, v.size])) };
+  // Per type, the most devices affected on any one day.
+  const peak = {};
+  for (const types of Object.values(days)) for (const [k, set] of Object.entries(types)) peak[k] = Math.max(peak[k] || 0, set.size);
+  return { any: all.size, byType: Object.fromEntries(Object.entries(byType).map(([k, v]) => [k, v.size])), peak };
 }
 
 /** Adds device counts of merged groups (devices in two groups may be counted twice). */
@@ -93,7 +102,10 @@ export function addDevices(a, b) {
   if (!b) return a;
   const byType = { ...a.byType };
   for (const [k, v] of Object.entries(b.byType || {})) byType[k] = (byType[k] || 0) + v;
-  return { any: (a.any || 0) + (b.any || 0), byType };
+  // The worst day of either (the same day can't be told apart once merged).
+  const peak = { ...(a.peak || {}) };
+  for (const [k, v] of Object.entries(b.peak || {})) peak[k] = Math.max(peak[k] || 0, v);
+  return { any: (a.any || 0) + (b.any || 0), byType, peak };
 }
 
 /** Fleet size per device type from crew numbers: { [label]: devices }. */
@@ -101,6 +113,27 @@ export function fleetFromCrew(crew, config) {
   if (!crew) return {};
   return Object.fromEntries((config?.types || []).map((t) => [t.label, Math.round(crew * t.perCrew)]).filter(([, n]) => n > 0));
 }
+
+/** Crew flying on a typical day for a crew list (its roster share), or null. */
+export function crewFlyingPerDay(headcount) {
+  const share = Number(headcount?.flying?.share);
+  if (!headcount?.values?.length || !(share > 0)) return null;
+  return Math.round(headcount.values.reduce((n, v) => n + v.count, 0) * (share / 100));
+}
+
+/**
+ * The fleet to measure against: devices in use on a typical day when the crew
+ * list has a share flying ({ daily: true }), else the whole fleet.
+ */
+export function fleetForHeadcount(headcount, config) {
+  if (!headcount?.values?.length) return { fleet: {}, daily: false, crew: 0 };
+  const flying = crewFlyingPerDay(headcount);
+  const crew = flying ?? headcount.values.reduce((n, v) => n + v.count, 0);
+  return { fleet: fleetFromCrew(crew, config), daily: flying !== null, crew };
+}
+
+/** Counts to judge against a daily fleet: each type's worst single day. */
+export const worstDay = (counts) => (counts?.peak ? { any: Math.max(0, ...Object.values(counts.peak)), byType: counts.peak } : counts);
 
 /** P1, P2 or null for a share of the fleet. */
 export const suggestPriority = (share, config) => (share === null ? null : share >= config.p1Percent ? 'P1' : share >= config.p2Percent ? 'P2' : null);
