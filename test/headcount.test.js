@@ -41,7 +41,7 @@ test('crew numbers are validated against organisations and breakdown fields', ()
     { organization: { id: '7' }, fieldId: 'customfield_9', values: [{ value: 'DUB', count: 1 }] },
   ], orgs, [{ id: 'customfield_1' }]);
   // Lists saved before 1.10 had one `organization`; they become `organizations`.
-  assert.deepEqual(clean, [{ organizations: [{ id: '188', name: 'Ryanair Crew' }], fieldId: 'customfield_1', values: [{ value: 'STN', count: 10 }], updatedAt: '2026-10-09T10:00:00.000Z', source: 'crew.csv', portal: true }]);
+  assert.deepEqual(clean, [{ organizations: [{ id: '188', name: 'Ryanair Crew' }], fieldId: 'customfield_1', values: [{ value: 'STN', count: 10 }], updatedAt: '2026-10-09T10:00:00.000Z', source: 'crew.csv', portal: true, flying: null }]);
   const settings = sanitizeSettings({ breakdowns: [{ id: 'customfield_1', label: 'Base' }], headcounts: clean }, fields, orgs);
   assert.equal(settings.headcounts.length, 1);
   assert.deepEqual(sanitizeSettings({ headcounts: clean }, fields, orgs).headcounts, []);

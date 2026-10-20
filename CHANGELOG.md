@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.25.0 (2026-10-20)
+
+- **P1/P2 against crew flying that day (Ryanair contract):** each crew list in Settings → Customers → Crew numbers has a "Typical % of crew flying per day". Upload a roster once (one row per crew member per flight, e.g. PreDailyRoster: FlightDate, CrewCode…) and it works the share out: distinct crew per day, averaged over the file's days, against the crew list (about 29% from the 20–21 Oct roster). It is read in the browser and only the share is saved; it can also be typed in. Devices in use a day = crew × that share × devices per crew member.
+- Live surges judge devices affected against the devices in use that day. Reports judge each issue on its worst single day against the same daily figure (P1 at 20%+, P2 at 5%+ by default, per device type). Without a share, the whole fleet is used as before.
+
 ## 1.24.0 (2026-10-20)
 
 - **Present to a client:** a button in the page header. Choose the customer and, until you press Stop presenting, the page shows only them: the organisation picker is locked to them, alerts are only theirs, and the customer health list, the report's health card (and its PDF section) and the Internal tab are hidden. Any report already on screen is cleared when you start. Kept in this browser only; other agents see the normal page and no settings change.

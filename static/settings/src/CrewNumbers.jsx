@@ -4,7 +4,7 @@
 // read here in the browser; only the number of crew per base is saved.
 import React, { useState } from 'react';
 import { Button, Card, Field, Notice } from '@retailinmotion/ui/react';
-import { crewFromFile, MAX_HEADCOUNT_ORGS, MAX_HEADCOUNTS, orgsOf } from '../../../src/headcount.js';
+import { crewFromFile, flyingFromRoster, MAX_HEADCOUNT_ORGS, MAX_HEADCOUNTS, orgsOf } from '../../../src/headcount.js';
 
 const n = (value) => Number(value || 0).toLocaleString();
 const day = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '');
@@ -47,6 +47,19 @@ export default function CrewNumbers({ headcounts = [], onChange, organizations =
     } catch (e) { setError(e.message || 'The file could not be read.'); }
   }
 
+  // A roster (one row per crew member per flight) gives the typical share flying a
+  // day, for devices in use that day (P1/P2). Read here; only the share is saved.
+  async function roster(index, file) {
+    setError('');
+    if (!file) return;
+    try {
+      if (file.size > 50 * 1024 * 1024) throw new Error('That file is over 50 MB.');
+      const crew = headcounts[index].values.reduce((t, v) => t + v.count, 0);
+      const result = flyingFromRoster(await file.text(), crew);
+      update(index, { flying: { share: result.share, days: result.days, source: file.name, updatedAt: new Date().toISOString() } });
+    } catch (e) { setError(e.message || 'The roster could not be read.'); }
+  }
+
   function add() {
     const chosen = organizations.filter((o) => picked.includes(o.id)).map((o) => ({ id: o.id, name: o.name }));
     if (!chosen.length || !parsed || !field) return;
@@ -74,6 +87,15 @@ export default function CrewNumbers({ headcounts = [], onChange, organizations =
             </div>
             <p className="nq-muted">{n(crew)} crew at {h.values.length} {h.values.length === 1 ? 'base' : 'bases'}, matched to {fieldLabel(h.fieldId)}. {h.source ? `From ${h.source}, ` : ''}updated {day(h.updatedAt)}.</p>
             <p className="nq-muted cs-crew__top">{h.values.slice(0, 8).map((v) => `${v.value} ${n(v.count)}`).join(' · ')}{h.values.length > 8 ? ' …' : ''}</p>
+            <div className="cs-flying">
+              <label htmlFor={`cs-flying-${index}`}>Typical % of crew flying per day</label>
+              <input id={`cs-flying-${index}`} className="nq-input cs-number" type="number" min={0.1} max={100} step={0.1} value={h.flying?.share ?? ''} placeholder="e.g. 29"
+                onChange={(e) => update(index, { flying: e.target.value === '' ? null : { share: Number(e.target.value), days: null, source: 'Typed in', updatedAt: new Date().toISOString() } })} />
+              <label className="nq-btn nq-btn--small cs-file">Upload roster<input type="file" accept=".csv,.txt" onChange={(e) => roster(index, e.target.files?.[0])} /></label>
+            </div>
+            <p className="nq-muted">{h.flying?.share
+              ? `Devices in use a day: ${n(Math.round(crew * h.flying.share / 100))} crew flying${h.flying.days ? ` (from ${h.flying.source || 'a roster'}, ${h.flying.days} ${h.flying.days === 1 ? 'day' : 'days'}, ${day(h.flying.updatedAt)})` : ''}. Live surges and reports judge P1/P2 against this.`
+              : 'Not set: devices are measured against the whole crew list. Upload a roster (one row per crew member per flight) once to work out the typical share flying a day.'}</p>
           </div>
           <div className="nq-inline cs-crew__actions">
             <label className="cs-check cs-portal" title={portalEnabled ? 'Customers see requests per 100 crew in these organisations’ portal reports' : 'Turn on the customer portal below first'}>

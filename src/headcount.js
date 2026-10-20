@@ -90,6 +90,49 @@ export function crewFromFile(text, { today = new Date().toISOString().slice(0, 1
   return { values, total: values.reduce((n, v) => n + v.count, 0), people, skipped };
 }
 
+/**
+ * The typical share of a crew list flying on a day, from a roster file (one
+ * row per crew member per flight, e.g. Ryanair's PreDailyRoster: FlightDate,
+ * CrewCode…): distinct crew per day, averaged over the days in the file, as a
+ * percentage of `crewTotal`. Read in the browser; only the share is kept.
+ */
+export function flyingFromRoster(text, crewTotal) {
+  const rows = csvRows(text);
+  if (rows.length < 2) throw new Error('The roster file is empty.');
+  const header = rows[0].map((h) => h.trim().toLowerCase().replace(/[^a-z]/g, ''));
+  const dateCol = header.findIndex((h) => ['flightdate', 'date', 'dutydate', 'rosterdate'].includes(h));
+  const crewCol = header.findIndex((h) => ['crewcode', 'crewid', 'staffnumber', 'employeeid', 'crew'].includes(h));
+  if (dateCol < 0 || crewCol < 0) throw new Error('The roster needs a FlightDate column and a CrewCode column.');
+  const days = new Map();
+  for (const r of rows.slice(1)) {
+    const date = isoDate(r[dateCol]);
+    const crew = String(r[crewCol] ?? '').trim().toUpperCase();
+    if (!date || !crew) continue;
+    if (!days.has(date)) days.set(date, new Set());
+    days.get(date).add(crew);
+  }
+  if (!days.size) throw new Error('No crew found in the roster.');
+  const perDay = [...days.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, set]) => ({ date, crew: set.size }));
+  const average = perDay.reduce((n, d) => n + d.crew, 0) / perDay.length;
+  if (!(crewTotal > 0)) throw new Error('Add the crew list first.');
+  const share = Math.round((average / crewTotal) * 1000) / 10;
+  if (share > 100) throw new Error(`The roster has more crew a day (${Math.round(average)}) than the crew list (${crewTotal}). Is it the right crew list?`);
+  return { share, days: perDay.length, averageCrew: Math.round(average), perDay };
+}
+
+/** A crew list's typical share flying per day, validated (null when not set). */
+export function sanitizeFlying(input) {
+  const share = Math.round(Number(input?.share) * 10) / 10;
+  if (!(share > 0 && share <= 100)) return null;
+  const days = Number(input?.days);
+  return {
+    share,
+    days: Number.isInteger(days) && days > 0 && days <= 400 ? days : null, // null: typed in by an admin
+    source: clip(input?.source, 120),
+    updatedAt: ISO_TIME.test(String(input?.updatedAt)) ? String(input.updatedAt) : new Date().toISOString(),
+  };
+}
+
 export const MAX_HEADCOUNT_ORGS = 10; // organisations sharing one crew list
 
 /** A crew list's organisations; lists saved before 1.10 had one `organization`. */
@@ -134,6 +177,8 @@ export function sanitizeHeadcounts(input, organizations = [], breakdowns = []) {
         updatedAt: ISO_TIME.test(String(h?.updatedAt)) ? String(h.updatedAt) : new Date().toISOString(),
         source: clip(h?.source, 120),
         portal: h?.portal === true,
+        // Typical share of this crew flying on a day (roster upload or typed in), for devices in use that day.
+        flying: sanitizeFlying(h?.flying),
       };
     })
     .filter(Boolean)
