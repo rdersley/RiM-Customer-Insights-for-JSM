@@ -2,6 +2,7 @@
 // particular projects (IT Help, SD…): client fields, breakdown fields, SLAs,
 // patterns and data quality. An analysis whose projects all share one set of
 // project settings uses them; anything else uses the default.
+import { DEFAULT_DISPATCH } from '../../../src/dispatch.js';
 import React, { useEffect, useState } from 'react';
 import { Button, Card, Field, Notice } from '@retailinmotion/ui/react';
 import { DEFAULT_INTERNAL_SYNONYMS, DEFAULT_SETTINGS, MAX_BREAKDOWNS, MAX_CLIENT_FIELDS, MAX_PROJECT_PROFILES } from '../../../src/settings.js';
@@ -126,6 +127,35 @@ export default function InternalSettings({ draft, update, fields, slaChoices, in
             value={Array.isArray(profile.escalation?.levels?.[i]) ? profile.escalation.levels[i].join('\n') : (profile.escalation?.levels?.[i] || '')}
             onChange={(e) => { const levels = [0, 1, 2].map((n) => (n === i ? e.target.value : profile.escalation?.levels?.[n] || [])); setProfile({ escalation: { ...profile.escalation, levels } }); }} />
         </Field>)}
+      </div>
+    </Card>}
+
+    {profile && <Card title="Hardware dispatch" description={`Internal reports for ${profile.name} show how long devices take to be sent against a target, the queue waiting now, and devices not yet returned, by device type.`}>
+      <div className="nq-stack">
+        <label className="cs-check">
+          <input type="checkbox" className="nq-check" checked={profile.dispatch?.enabled === true}
+            onChange={(e) => setProfile({ dispatch: { ...DEFAULT_DISPATCH, ...profile.dispatch, enabled: e.target.checked } })} />
+          <span>Show hardware dispatch for these projects</span>
+        </label>
+        {profile.dispatch?.enabled && <>
+          <div className="cs-row cs-row--pair">
+            <Field label="Device type field" htmlFor="cs-disp-device" help="Splits every figure by device, for example Device Type.">
+              <select id="cs-disp-device" className="nq-select" value={profile.dispatch.deviceFieldId || ''} onChange={(e) => setProfile({ dispatch: { ...profile.dispatch, deviceFieldId: e.target.value } })}>
+                <option value="">None</option>
+                {fields.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Target (hours)" htmlFor="cs-disp-target" help="From the request to the device being sent.">
+              <input id="cs-disp-target" className="nq-input cs-number" type="number" min={1} max={2000} value={profile.dispatch.targetHours ?? 48}
+                onChange={(e) => setProfile({ dispatch: { ...profile.dispatch, targetHours: Number(e.target.value) } })} />
+            </Field>
+          </div>
+          {[['queueStatuses', 'Waiting to be sent', 'Open'], ['sentStatuses', 'Sent (first move here counts as dispatched)', 'Dispatched to Customer\nWaiting Device Return'], ['returnStatuses', 'Sent, waiting for the old device back (optional)', 'Waiting Device Return']].map(([key, label, placeholder]) => <Field key={key} label={`${label} statuses`} htmlFor={`cs-disp-${key}`} help={key === 'queueStatuses' ? 'One per line.' : undefined}>
+            <textarea id={`cs-disp-${key}`} className="nq-textarea" rows={2} placeholder={placeholder}
+              value={Array.isArray(profile.dispatch[key]) ? profile.dispatch[key].join('\n') : (profile.dispatch[key] || '')}
+              onChange={(e) => setProfile({ dispatch: { ...profile.dispatch, [key]: e.target.value } })} />
+          </Field>)}
+        </>}
       </div>
     </Card>}
 

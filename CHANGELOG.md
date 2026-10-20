@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.27.0 (2026-10-20)
+
+- **Hardware dispatch** (Internal tab, switched on in a project's settings, e.g. HW): the share of devices sent within the target (48 hours by default; calendar hours from the request to the first move to a sent status such as Dispatched to Customer or Waiting Device Return), typical and 90th-percentile time to send, the queue waiting now with its age (over target, up to 7 days, 7–30, 30–90, over 90), devices sent but not yet returned, and requests against devices sent per week for 12 weeks with whether the queue is growing or when it clears. Every figure is split by device type (the Device Type field). In the PDF too, and it can be hidden under Report sections. Narrow by client to see one customer.
+
 ## 1.26.0 (2026-10-20)
 
 - **SLAs for customer reports:** the Customers tab of settings has its own SLAs card, so customer reports can use different SLA fields from internal reports, or none. It starts with the SLAs chosen before (shared with internal reports until now).

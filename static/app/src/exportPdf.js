@@ -128,6 +128,36 @@ export function buildPdf(JsPdf, c, { product = 'Customer Insights', version = ''
     paragraph(h.note, { size: 8, rgb: MUTED, gap: 2 });
   }
 
+  // ---- Hardware dispatch (internal reports) ---------------------------------------
+  if (c.dispatch) {
+    heading('Hardware dispatch');
+    for (const line of c.dispatch.lines) paragraph(line, { size: 9.5, gap: 1.5 });
+    y += 1.5;
+    const cols = [{ label: 'Waiting', x: 104 }, { label: 'Over target', x: 126 }, { label: 'Sent', x: 142 }, { label: 'Typical', x: 162 }, { label: 'Within', x: 180 }, { label: 'Not back', x: W - M }];
+    const header = () => {
+      font(8, 'bold', MUTED);
+      doc.text('Device', M, y + 4);
+      cols.forEach((col) => doc.text(col.label, col.x, y + 4, { align: 'right' }));
+      y += 6; doc.setDrawColor(...RULE); doc.setLineWidth(0.3); doc.line(M, y, W - M, y); y += 1;
+    };
+    header();
+    onNewPage = header;
+    for (const d of c.dispatch.devices) {
+      room(lineHeight(9.5) + 1.5);
+      const base = y + lineHeight(9.5) * 0.78;
+      font(9.5, 'bold'); doc.text(split(d.device, 70)[0] || '', M, base);
+      font(9.5, 'normal');
+      [d.queue, d.overTarget, d.sent, d.median, d.within, d.returns].forEach((v, i) => {
+        if (i === 1 && v !== '0') font(9.5, 'bold', MORE); else font(9.5, 'normal');
+        doc.text(pdfSafe(v), cols[i].x, base, { align: 'right' });
+      });
+      y += lineHeight(9.5) + 0.5;
+      doc.setDrawColor(...RULE); doc.setLineWidth(0.15); doc.line(M, y, W - M, y); y += 1;
+    }
+    onNewPage = null;
+    y += 2;
+  }
+
   // ---- AI summary --------------------------------------------------------------
   if (c.overview || c.actions.length) {
     heading('Summary');

@@ -11,6 +11,7 @@ export const REPORT_SECTIONS = [
   { key: 'flow', label: 'Flow and workload' },
   { key: 'team', label: 'Team performance', only: 'internal' },
   { key: 'escalation', label: 'Escalation levels', only: 'internal' },
+  { key: 'dispatch', label: 'Hardware dispatch', only: 'internal' },
   { key: 'breakdowns', label: 'Breakdowns' },
   { key: 'crew', label: 'Tickets per 100 crew', only: 'customers' },
   { key: 'timeOfDay', label: 'When tickets arrive' },

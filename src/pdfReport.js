@@ -1,6 +1,7 @@
 // What goes in the PDF export, as plain data. The page draws it with jsPDF
 // (static/app/src/exportPdf.js); keeping the wording here means it can be
 // tested and stays in step with what the page shows.
+import { dispatchSection } from './dispatch.js';
 import { median, patternTrend, topShares } from './analysis.js';
 import { duration, trendWord } from './trend.js';
 import { DAYS, hoursOf, outOfHoursShare, peakWindow, windowText } from './timeOfDay.js';
@@ -50,7 +51,7 @@ export function healthSection(health) {
   };
 }
 
-export function pdfContent({ report, groups = report?.groups || [], ai = null, generatedAt = new Date(), filter = null, crew = null, health = null, hidden = report?.hiddenSections || [] }) {
+export function pdfContent({ report, groups = report?.groups || [], ai = null, generatedAt = new Date(), filter = null, crew = null, health = null, dispatch = null, hidden = report?.hiddenSections || [] }) {
   if (!report) throw new Error('There is no report to export.');
   // Sections an admin hid (settings → Report sections) are left out of the PDF too.
   const shown = (key) => !hidden.includes(key);
@@ -150,6 +151,7 @@ export function pdfContent({ report, groups = report?.groups || [], ai = null, g
     categories,
     crew: crewSection(crew),
     health: healthSection(health),
+    dispatch: shown('dispatch') ? dispatchSection(dispatch) : null,
     volume: { points: shown('activity') ? report.timeSeries || [] : [], unit: (Date.parse(report.endDate) - Date.parse(report.startDate)) / 86400000 < 35 ? 'day' : 'week' },
     issues,
     moreIssues: Math.max(0, groups.length - PDF_ISSUES),

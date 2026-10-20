@@ -225,3 +225,14 @@
 .ci-up { color: var(--nq-text-success); }
 .ci-down { color: var(--nq-text-danger); }
 @media (max-width: 700px) { .ci-health { grid-template-columns: minmax(0, 1fr); } }
+
+/* Hardware dispatch */
+.ci-dispatch .ci-num { text-align: right; white-space: nowrap; }
+.ci-dispatch__ages { display: flex; flex-wrap: wrap; gap: var(--nq-space-100) var(--nq-space-300); margin: var(--nq-space-150) 0; color: var(--nq-text-subtle); }
+.ci-dispatch__weeks { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--nq-space-100); height: 120px; align-items: end; }
+.ci-dispatch__week { display: grid; grid-template-rows: 1fr auto; height: 100%; text-align: center; font-size: 11px; color: var(--nq-text-subtle); }
+.ci-dispatch__bars { display: flex; align-items: flex-end; justify-content: center; gap: 2px; height: 100%; }
+.ci-dispatch__bars i { display: block; width: 40%; border-radius: var(--nq-radius-sm) var(--nq-radius-sm) 0 0; }
+.ci-dispatch__in { background: var(--nq-bg-neutral-bold, var(--nq-text-subtle)); }
+.ci-dispatch__out { background: var(--nq-bg-brand); }
+.ci-dispatch__key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; margin: 0 var(--nq-space-050) 0 var(--nq-space-100); }
