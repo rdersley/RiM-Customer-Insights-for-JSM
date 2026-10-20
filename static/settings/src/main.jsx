@@ -14,6 +14,7 @@ import BreakdownFields from './BreakdownFields.jsx';
 import PatternSettings from './PatternSettings.jsx';
 import InternalSettings from './InternalSettings.jsx';
 import ReportSections from './ReportSections.jsx';
+import SlaSettings from './SlaSettings.jsx';
 import DeviceSettings from './DeviceSettings.jsx';
 import EmailReports from './EmailReports.jsx';
 import CrewNumbers from './CrewNumbers.jsx';
@@ -78,6 +79,11 @@ function App() {
       <div className="cs-tabs"><Tabs items={[{ id: 'customers', label: 'Customers' }, { id: 'internal', label: 'Internal' }, { id: 'general', label: 'Backup' }]} active={tab} onChange={setTab} /></div>
 
       {tab === 'customers' && <>
+      <ReportSections scope="customers" value={draft.hiddenSections} onChange={(hiddenSections) => { setSaved(false); setDraft((d) => ({ ...d, hiddenSections })); }} />
+
+      <SlaSettings scope="customers" value={draft.customerSlaFields ?? draft.slaFields ?? []} choices={state.slaChoices || []}
+        onChange={(ids) => { setSaved(false); setDraft((d) => ({ ...d, customerSlaFields: ids.map((id) => (state.slaChoices || []).find((c) => c.id === id) || { id }) })); }} />
+
       <BreakdownFields id="cs-bd" title="Breakdown fields" showPortal fields={state.fields}
         description={`Customer reports show tickets and each issue split by these fields, for example base or device type. Up to ${MAX_BREAKDOWNS}.`}
         list={draft.breakdowns} onChange={(breakdowns) => { setSaved(false); setDraft((d) => ({ ...d, breakdowns })); }} />
@@ -176,7 +182,6 @@ function App() {
         <p className="nq-muted">Off by default. While it’s off, “Service report” in the portal menu tells customers reports aren’t available, and nothing is published.</p>
       </Card>
 
-      <ReportSections scope="customers" value={draft.hiddenSections} onChange={(hiddenSections) => { setSaved(false); setDraft((d) => ({ ...d, hiddenSections })); }} />
 
       <PdfLogos invoke={invoke} organizations={state.organizations || []} />
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.26.0 (2026-10-20)
+
+- **SLAs for customer reports:** the Customers tab of settings has its own SLAs card, so customer reports can use different SLA fields from internal reports, or none. It starts with the SLAs chosen before (shared with internal reports until now).
+- **Report sections** is now the first card on the Customers tab.
+
 ## 1.25.0 (2026-10-20)
 
 - **P1/P2 against crew flying that day (Ryanair contract):** each crew list in Settings → Customers → Crew numbers has a "Typical % of crew flying per day". Upload a roster once (one row per crew member per flight, e.g. PreDailyRoster: FlightDate, CrewCode…) and it works the share out: distinct crew per day, averaged over the file's days, against the crew list (about 29% from the 20–21 Oct roster). It is read in the browser and only the share is saved; it can also be typed in. Devices in use a day = crew × that share × devices per crew member.
