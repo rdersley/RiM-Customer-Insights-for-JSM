@@ -1,5 +1,5 @@
-// Team performance (agentPerformance resolver): team totals for everyone, and a
-// per-agent table for Jira admins only. Figures are for tickets resolved in the
+// Team performance (agentPerformance resolver): team totals and a per-agent
+// table, for every agent. Figures are for tickets resolved in the
 // period; open tickets are as of now. Read with the work mix: an agent on harder
 // or more urgent tickets is slower for good reasons.
 import React, { useState } from 'react';
@@ -77,7 +77,7 @@ export default function TeamPerformance({ data, loading, error }) {
           </tr>)}</tbody>
         </table>
       </div>
-      <p className="nq-muted">Per-agent figures are shown to Jira admins only. Satisfaction shows the average rating and how many tickets were rated. AHT is the time a ticket spent in progress while assigned to the agent, per ticket they worked on (the small number); {data.handling?.statuses ? `in progress means: ${data.handling.statuses.join(', ')}` : 'waiting statuses such as “Waiting for customer” don’t count'}.</p>
-    </> : <p className="nq-muted">Per-agent figures are available to Jira admins.</p>}
+      <p className="nq-muted">Satisfaction shows the average rating and how many tickets were rated. AHT is the time a ticket spent in progress while assigned to the agent, per ticket they worked on (the small number); {data.handling?.statuses ? `in progress means: ${data.handling.statuses.join(', ')}` : 'waiting statuses such as “Waiting for customer” don’t count'}.</p>
+    </> : null}
   </Card>;
 }

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.30.0 (2026-10-20)
+
+- **Reports are open to every agent:** per-agent rows in Team performance and refreshing the customer health list no longer need a Jira admin. The settings page (Jira settings → Apps → Customer Insights), email reports, logos, backup and the settings page's spike check stay Jira admin only. Publishing to the customer portal is unchanged (Jira admins and project admins).
+
 ## 1.29.1 (2026-10-20)
 
 - **No more blank page when part of a report fails:** each report card (team performance, hardware dispatch, escalation levels, devices, SLAs and the rest) now shows its own error in place of the card, and the rest of the report still shows. If the page itself fails, it says what went wrong with a Try again button instead of an empty frame. The message names the error, so the cause can be fixed.
