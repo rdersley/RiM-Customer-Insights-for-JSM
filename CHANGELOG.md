@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.29.0 (2026-10-20)
+
+- **One device user per crew team:** a crew of four works several sectors on one aircraft (a morning crew, then an afternoon crew), so counting flights over-counted devices in use. The roster upload now counts crew teams a day (crew working the same flights) and the button is "One per crew team": 25.3% of crew flying from the 20–21 Oct roster (1,198 teams a day), so about 1,198 devices of each type in use a day and P1 at about 240 affected. Replaces "One per flight"; the percentage stays adjustable.
+
 ## 1.28.0 (2026-10-20)
 
 - **Devices in use a day, adjustable:** next to "Typical % of crew flying per day", each crew list has "% of them using a device" (default 100%). Ryanair say only one crew member per flight reports a device issue, so the roster upload now also counts flights a day and offers a "One per flight" button (75.1% from the 20–21 Oct roster: 3,553 flights for 4,734 crew). Devices in use a day = crew × % flying × % using a device; the card shows the result and the device counts that would suggest P1 and P2. Both percentages can be changed at any time.
