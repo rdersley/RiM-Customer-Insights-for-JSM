@@ -11,7 +11,8 @@ const time = (h) => (h === null || h === undefined ? '–' : duration(h));
 export default function EscalationCard({ data, loading, error }) {
   if (loading) return <Card title="Escalation levels"><Loading inline text="Reading ticket histories for escalation…" /></Card>;
   if (error) return <Card title="Escalation levels"><Notice kind="error">{error}</Notice></Card>;
-  if (!data) return null;
+  // Not switched on for these projects: the resolver returns nothing, which can arrive as {}.
+  if (!data?.reach) return null;
   const reach = (level) => data.reach.find((r) => r.level === level);
   const highest = (level) => data.byLevel.find((l) => l.level === level);
   const approx = data.sampled ? '≈' : '';

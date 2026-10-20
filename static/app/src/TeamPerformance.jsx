@@ -24,7 +24,7 @@ export default function TeamPerformance({ data, loading, error }) {
   const [slaId, setSlaId] = useState('');
   if (loading) return <Card title="Team performance"><Loading inline text="Working out resolved and open tickets per agent…" /></Card>;
   if (error) return <Card title="Team performance"><Notice kind="error">{error}</Notice></Card>;
-  if (!data) return null;
+  if (!data?.team) return null;
   const sla = data.slaFields.find((s) => s.id === slaId) || data.slaFields[0] || null;
   const t = data.team;
   const approx = data.estimated ? '≈' : '';

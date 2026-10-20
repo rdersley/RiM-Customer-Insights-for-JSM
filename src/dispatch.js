@@ -120,7 +120,7 @@ export function hoursText(hours) {
 
 /** The PDF section (pdfReport.js) for dispatch figures, or null. */
 export function dispatchSection(d) {
-  if (!d || (!d.queue.total && !d.sent.sent)) return null;
+  if (!d?.queue || !d?.sent || (!d.queue.total && !d.sent.sent)) return null; // {} when not switched on
   const t = d.trend;
   const lines = [
     `${d.sent.sent.toLocaleString('en-GB')} sent in the period: median ${hoursText(d.sent.medianHours)}, 90% within ${hoursText(d.sent.p90Hours)}; ${d.sent.withinShare ?? 0}% within the ${d.targetHours}-hour target.`,
