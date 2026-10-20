@@ -16,6 +16,7 @@ import { isLive, liveConfigFrom } from './live.js';
 import { queueAlertCheck, queueEmail, queueHealth, queueRefresh } from './liveJobs.js';
 import { changeOver } from './health.js';
 import { hiddenFor } from './sections.js';
+import { deviceOf as deviceOfDispatch, DISPATCH_WEEKS, dispatchSummary, hoursToSent } from './dispatch.js';
 import { allClientFields, analysisConfig, autoInternalBreakdowns, organisationBreakdown, sanitizeSettings, selectableFields } from './settings.js';
 import { problemFields, problemRequest, relatesLinkType } from './problem.js';
 import { slaFieldChoices, slaState } from './sla.js';
@@ -450,6 +451,56 @@ define('escalation', async ({ payload, context }) => {
   const summary = escalationSummary(results);
   console.log(`escalation: ${total} created (${tickets.length} read, ${results.length} with history), levels ${summary.byLevel.map((l) => `${l.level}:${l.tickets}`).join(' ')}${complete ? '' : ', partial'}`);
   return { total, sampled: tickets.length < total, complete, ...summary, mapping, profile: config.profile };
+});
+
+// Hardware dispatch (src/dispatch.js): for internal analyses whose project
+// settings switch it on (e.g. HW). The queue waiting to be sent now, devices
+// sent in the period with their time to dispatch, devices not yet returned,
+// and created against sent for the last 12 weeks. Reads as the agent.
+const DISPATCH_MAX = 4000;
+define('hardwareDispatch', async ({ payload, context }) => {
+  if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
+  if (payload?.scope !== 'internal') throw new Error('Hardware dispatch is only available on the Internal tab.');
+  const settings = await loadSettings();
+  const config = analysisConfig(settings, payload).dispatch;
+  if (!config) return null;
+  const query = parseQuery(payload, null, { clientFields: allClientFields(settings) });
+  const deadline = Date.now() + 22000;
+  const scope = query.scopeJql;
+  const list = (names) => names.map((n) => `"${n.replace(/"/g, '\\"')}"`).join(', ');
+  const fields = config.deviceFieldId ? [{ id: config.deviceFieldId, kind: null }] : [];
+  const fetchAll = async (jql) => {
+    const out = [];
+    let token;
+    do {
+      if (Date.now() > deadline - 6000) return { issues: out, complete: false };
+      const page = await searchPage(jql, 100, token, fields, 'user');
+      out.push(...page.issues);
+      token = page.nextPageToken;
+    } while (token && out.length < DISPATCH_MAX);
+    return { issues: out, complete: !token };
+  };
+  const sentJql = `${scope} AND status changed to (${list(config.sentStatuses)}) during ("${query.startDate}", "${query.endExclusive}")`;
+  const weeks = pastWeeks(Date.now(), DISPATCH_WEEKS);
+  const [queue, sent, returns, created, sentWeekly] = await Promise.all([
+    fetchAll(`${scope} AND status in (${list(config.queueStatuses)})`),
+    fetchAll(sentJql),
+    config.returnStatuses.length ? fetchAll(`${scope} AND status in (${list(config.returnStatuses)})`) : Promise.resolve({ issues: [], complete: true }),
+    pool(weeks.map((w) => () => countIssues(`${scope} AND created >= "${w.from}" AND created < "${w.toExclusive}"`, 'user')), 6),
+    pool(weeks.map((w) => () => countIssues(`${scope} AND status changed to (${list(config.sentStatuses)}) during ("${w.from}", "${w.toExclusive}")`, 'user')), 6),
+  ]);
+  const { histories, complete: historiesComplete } = await fetchHistories(sent.issues, ['status'], deadline);
+  const from = Date.parse(`${query.startDate}T00:00:00Z`);
+  const sentTimes = sent.issues
+    .map((issue) => ({ device: deviceOfDispatch(issue, config.deviceFieldId), hours: hoursToSent(issue, histories.get(String(issue.id)), config.sentStatuses, from) }))
+    .filter((s) => s.hours !== null);
+  const summary = dispatchSummary({
+    queue: queue.issues, sent: sentTimes, returns: returns.issues, config,
+    weekly: weeks.map((w, i) => ({ from: w.from, created: created[i] ?? 0, sent: sentWeekly[i] ?? 0 })),
+  });
+  const complete = queue.complete && sent.complete && returns.complete && historiesComplete;
+  console.log(`hardwareDispatch: queue ${queue.issues.length}, sent ${sentTimes.length}/${sent.issues.length}, returns ${returns.issues.length}, ${summary.byDevice.length} device types${complete ? '' : ', partial (time limit)'}`);
+  return { ...summary, complete, profile: analysisConfig(settings, payload).profile };
 });
 
 /** Status (or other field) history for tickets, 1,000 a call, until `deadline`. */

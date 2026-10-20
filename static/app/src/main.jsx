@@ -12,6 +12,7 @@ import CrewRates from './CrewRates.jsx';
 import { EffortCard, FlowCard, KnowledgeCard, SlaCard } from './WorkloadCards.jsx';
 import TeamPerformance from './TeamPerformance.jsx';
 import EscalationCard from './EscalationCard.jsx';
+import DispatchCard from './DispatchCard.jsx';
 import { HealthBoard, HealthCard } from './HealthCards.jsx';
 import { healthOf } from '../../../src/health.js';
 import ChannelPicker, { useChannel } from './ChannelPicker.jsx';
@@ -166,6 +167,8 @@ function App() {
   const [flow, setFlow] = useState(null);
   const [flowLoading, setFlowLoading] = useState(false);
   const [flowError, setFlowError] = useState('');
+  // Hardware dispatch (internal, when the projects' settings switch it on).
+  const [dispatch, setDispatch] = useState({ data: null, loading: false, error: '' });
   // Customer health: the all-customers list, and whether the report's score goes in the PDF.
   const [healthBoard, setHealthBoard] = useState(null);
   const [healthInPdf, setHealthInPdf] = useState(true);
@@ -284,7 +287,7 @@ function App() {
     setFilter(nextFilter);
     cancelFull.current = true;
     setLoadingReport(true); setError(''); setReport(null); setAi(null); setAiError(''); setFullRun(null); setFullError('');
-    setFlow(null); setFlowError(''); setTeam({ data: null, loading: false, error: '' }); setEscalation({ data: null, loading: false, error: '' });
+    setFlow(null); setFlowError(''); setTeam({ data: null, loading: false, error: '' }); setEscalation({ data: null, loading: false, error: '' }); setDispatch({ data: null, loading: false, error: '' });
     const shared = { startDate: from, endDate: to, timeZone: LOCAL_ZONE, ...(nextFilter && { filter: { id: nextFilter.id, value: nextFilter.value } }) };
     const query = internal
       ? { scope: 'internal', projects: internalProjects, clients, ...shared }
@@ -304,6 +307,10 @@ function App() {
       if (internal && !hidden.includes('team')) {
         setTeam({ data: null, loading: true, error: '' });
         invoke('agentPerformance', query).then((data) => setTeam({ data, loading: false, error: '' })).catch((e) => setTeam({ data: null, loading: false, error: e.message || 'Team performance couldn’t be worked out.' }));
+      }
+      if (internal && !hidden.includes('dispatch')) {
+        setDispatch({ data: null, loading: true, error: '' });
+        invoke('hardwareDispatch', query).then((data) => setDispatch({ data, loading: false, error: '' })).catch((e) => setDispatch({ data: null, loading: false, error: e.message || 'Hardware dispatch couldn’t be worked out.' }));
       }
       if (internal && !hidden.includes('escalation')) {
         setEscalation({ data: null, loading: true, error: '' });
@@ -520,7 +527,7 @@ function App() {
     try {
       // Logos are optional: a failed lookup still gives a PDF.
       const logos = await invoke('getPdfLogos', { orgId: reportOrgId || null }).catch(() => null);
-      await exportPdf({ report, groups, ai, filter: report.filter, crew, health: healthInPdf && health?.score !== null ? health : null, logos, product: PRODUCT, version });
+      await exportPdf({ report, groups, ai, filter: report.filter, crew, health: healthInPdf && health?.score !== null ? health : null, dispatch: lastQuery?.scope === 'internal' ? dispatch.data : null, logos, product: PRODUCT, version });
     } catch (e) {
       setError(`The PDF couldn’t be created: ${e.message || 'unknown error'}`);
     } finally { setPdfBusy(false); }
@@ -897,6 +904,8 @@ function App() {
       {shown('flow') && <FlowCard flow={flow} loading={flowLoading} error={flowError} timeOfDay={report.timeOfDay} />}
 
       {lastQuery?.scope === 'internal' && shown('team') && <TeamPerformance data={team.data} loading={team.loading} error={team.error} />}
+
+      {lastQuery?.scope === 'internal' && shown('dispatch') && <DispatchCard data={dispatch.data} loading={dispatch.loading} error={dispatch.error} />}
 
       {lastQuery?.scope === 'internal' && shown('escalation') && <EscalationCard data={escalation.data} loading={escalation.loading} error={escalation.error} />}
 
