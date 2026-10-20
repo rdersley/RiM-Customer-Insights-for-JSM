@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.29.1 (2026-10-20)
+
+- **No more blank page when part of a report fails:** each report card (team performance, hardware dispatch, escalation levels, devices, SLAs and the rest) now shows its own error in place of the card, and the rest of the report still shows. If the page itself fails, it says what went wrong with a Try again button instead of an empty frame. The message names the error, so the cause can be fixed.
+
 ## 1.29.0 (2026-10-20)
 
 - **One device user per crew team:** a crew of four works several sectors on one aircraft (a morning crew, then an afternoon crew), so counting flights over-counted devices in use. The roster upload now counts crew teams a day (crew working the same flights) and the button is "One per crew team": 25.3% of crew flying from the 20–21 Oct roster (1,198 teams a day), so about 1,198 devices of each type in use a day and P1 at about 240 affected. Replaces "One per flight"; the percentage stays adjustable.
