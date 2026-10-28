@@ -21,6 +21,7 @@ import CrewNumbers from './CrewNumbers.jsx';
 import SurgeSettings from './SurgeSettings.jsx';
 import HealthSettings from './HealthSettings.jsx';
 import PdfLogos from './PdfLogos.jsx';
+import WeeklySettings from './WeeklySettings.jsx';
 import rimLogo from './assets/rim-logo.png';
 import './styles.css';
 
@@ -76,7 +77,7 @@ function App() {
     {error && <Notice kind="error" title="Settings weren’t saved.">{error}</Notice>}
 
     {draft && <>
-      <div className="cs-tabs"><Tabs items={[{ id: 'customers', label: 'Customers' }, { id: 'internal', label: 'Internal' }, { id: 'general', label: 'Backup' }]} active={tab} onChange={setTab} /></div>
+      <div className="cs-tabs"><Tabs items={[{ id: 'customers', label: 'Customers' }, { id: 'internal', label: 'Internal' }, { id: 'weekly', label: 'Weekly report' }, { id: 'general', label: 'Backup' }]} active={tab} onChange={setTab} /></div>
 
       {tab === 'customers' && <>
       <ReportSections scope="customers" value={draft.hiddenSections} onChange={(hiddenSections) => { setSaved(false); setDraft((d) => ({ ...d, hiddenSections })); }} />
@@ -193,6 +194,9 @@ function App() {
         update={(fn) => { setSaved(false); setDraft(fn); }} />}
 
       {tab === 'internal' && <ReportSections scope="internal" value={draft.hiddenSections} onChange={(hiddenSections) => { setSaved(false); setDraft((d) => ({ ...d, hiddenSections })); }} />}
+
+      {tab === 'weekly' && <WeeklySettings value={draft.weekly} organizations={state.organizations || []} fields={state.fields || []}
+        onChange={(weekly) => { setSaved(false); setDraft((d) => ({ ...d, weekly })); }} />}
 
       <ActionBar state={saving ? 'Saving…' : dirty ? 'Unsaved changes' : saved ? 'Saved' : ''}>
         <Button appearance="subtle" disabled={!dirty || saving} onClick={() => { setDraft(state.settings); setSaved(false); }}>Discard</Button>

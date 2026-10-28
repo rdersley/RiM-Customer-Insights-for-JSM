@@ -112,6 +112,7 @@ export const scheduler = async () => {
   await scheduleAlerts();
   await scheduleEmails();
   await scheduleHealth();
+  try { await (await import('./weeklyJobs.js')).scheduleWeekly(); } catch (error) { console.error(`weekly: scheduler failed: ${error.message}`); }
   const cleaned = await storage.scrubAccountIds();
   if (cleaned) console.log(`privacy: removed account ids from ${cleaned} stored items`);
 };
@@ -190,6 +191,11 @@ export const consumer = async (event) => {
   if (event?.body?.type === 'email') {
     const { sendSchedule } = await import('./emailJobs.js');
     await sendSchedule(event.body.scheduleId, { reason: event.body.reason, slot: event.body.slot, overrideTo: event.body.overrideTo });
+    return;
+  }
+  if (event?.body?.type === 'weekly') {
+    const { buildWeekly } = await import('./weeklyJobs.js');
+    await buildWeekly(String(event.body.reportId), String(event.body.from));
     return;
   }
   const orgId = event?.body?.orgId;

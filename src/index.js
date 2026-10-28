@@ -1,7 +1,7 @@
 import ResolverModule from '@forge/resolver';
 import { asUser, route } from '@forge/api';
 import { textOf } from './analysis.js';
-import { countIssues, dateSlices, deviceFieldIds, filterFor, organisationsOf, parseQuery, pool, readJson, requestWithRetry, runAnalysis, satisfactionField, searchPage } from './engine.js';
+import { countIssues, dateSlices, deviceFieldIds, fetchHistories, filterFor, organisationsOf, parseQuery, pool, readJson, requestWithRetry, runAnalysis, satisfactionField, searchPage } from './engine.js';
 import { agentRows, handlingTimes, satisfactionFieldId, teamTotals } from './agents.js';
 import { chartBuckets } from './analysis.js';
 import { AGE_BANDS, backlogAges, flowSummary, forecast, pastWeeks } from './flow.js';
@@ -26,6 +26,9 @@ import { channelOf } from './channels.js';
 import { emailList, MAX_SCHEDULES, sanitizeEmailConfig, sanitizeSchedule } from './email.js';
 import { loadEmailConfig, loadEmailLog, loadEmailSecret, loadSchedules, loadScheduleState, saveEmailConfig, saveEmailSecret, saveSchedules } from './storage.js';
 import { searchWords } from './surge.js';
+import { isMonday, lastWeek, sanitizeNotes, weekOf, WEEKS_KEPT } from './weekly.js';
+import { queueWeekly } from './weeklyJobs.js';
+import { listWeekly, loadWeekly, saveWeekly } from './storage.js';
 
 // This package is "type": "module"; Forge's bundler then hands CommonJS packages
 // over as their exports object, so the class sits on `.default`.
@@ -500,33 +503,6 @@ define('hardwareDispatch', async ({ payload, context }) => {
   return { ...summary, complete, profile: analysisConfig(settings, payload).profile };
 });
 
-/** Status (or other field) history for tickets, 1,000 a call, until `deadline`. */
-async function fetchHistories(issues, fieldIds, deadline) {
-  const histories = new Map();
-  let complete = true;
-  for (let i = 0; i < issues.length && complete; i += 1000) {
-    const ids = issues.slice(i, i + 1000).map((issue) => String(issue.id)).filter(Boolean);
-    let token;
-    do {
-      if (Date.now() > deadline) { complete = false; break; }
-      const page = await readJson(await requestWithRetry(() => asUser().requestJira(route`/rest/api/3/changelog/bulkfetch`, {
-        method: 'POST',
-        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ issueIdsOrKeys: ids, fieldIds, maxResults: 1000, ...(token ? { nextPageToken: token } : {}) }),
-      })), 'Ticket history');
-      for (const log of page.issueChangeLogs || []) {
-        const list = histories.get(String(log.issueId)) || [];
-        list.push(...(log.changeHistories || []));
-        histories.set(String(log.issueId), list);
-      }
-      token = page.nextPageToken;
-    } while (token);
-  }
-  // The bulk API can repeat histories across pages.
-  for (const [id, list] of histories) histories.set(id, [...new Map(list.map((h, n) => [h.id ?? `i${n}`, h])).values()]);
-  return { histories, complete };
-}
-
 // ---- Email reports (src/email.js, emailJobs.js): Jira admins only -----------------
 
 async function requireEmailAdmin(context) {
@@ -733,6 +709,85 @@ define('unpublishReport', async ({ payload, context }) => {
   const organization = await visibleOrganisation(payload?.orgId);
   await Promise.all([deleteReport(organization.id), deleteLive(organization.id)]);
   return { removed: true };
+});
+
+// ---- Weekly SD report (src/weekly.js, weeklyJobs.js) ----------------------------
+// Any agent who can see one of a report's organisations can read it, rebuild a
+// week and write its notes; publishing to the portal is for Jira admins and
+// project admins, as for service reports.
+
+/** The weekly report with this id, if the agent can see any of its organisations. */
+async function visibleWeekly(id) {
+  const { weekly } = await loadSettings();
+  const config = (weekly?.reports || []).find((r) => r.id === String(id ?? ''));
+  if (!config) throw new Error('That weekly report no longer exists. Check Customer Insights settings → Weekly report.');
+  const visible = new Set((await listOrganizations()).map((o) => o.id));
+  if (!config.organizations.some((o) => visible.has(o.id))) throw new Error('This weekly report isn’t available to you.');
+  return config;
+}
+
+/** A week (Monday) within the last 12 whole weeks. */
+function weekFrom(from) {
+  const latest = lastWeek();
+  const week = isMonday(from) ? weekOf(from) : latest;
+  const oldest = new Date(Date.parse(`${latest.from}T00:00:00Z`) - (WEEKS_KEPT - 1) * 7 * 86400000).toISOString().slice(0, 10);
+  if (week.from > latest.from || week.from < oldest) throw new Error('Choose one of the last 12 whole weeks.');
+  return week;
+}
+
+const weekSummary = (r) => ({ from: r.week.from, to: r.week.to, builtAt: r.builtAt || null, queuedAt: r.queuedAt || null, lastError: r.lastError || null, publishedAt: r.publishedAt || null });
+
+define('getWeeklyReports', async ({ context }) => {
+  if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
+  const { weekly } = await loadSettings();
+  const reports = weekly?.reports || [];
+  if (!reports.length) return { reports: [], canPublish: false, latest: lastWeek().from };
+  const visible = new Set((await listOrganizations()).map((o) => o.id));
+  const mine = reports.filter((r) => r.organizations.some((o) => visible.has(o.id)));
+  const [weeks, allowed] = await Promise.all([Promise.all(mine.map((r) => listWeekly(r.id))), canPublish()]);
+  return {
+    canPublish: allowed,
+    latest: lastWeek().from,
+    reports: mine.map((r, i) => ({ id: r.id, name: r.name, organizations: r.organizations, portal: r.portal, weeks: weeks[i].map(weekSummary) })),
+  };
+});
+
+define('getWeeklyReport', async ({ payload, context }) => {
+  if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
+  const config = await visibleWeekly(payload?.id);
+  return loadWeekly(config.id, weekFrom(payload?.from).from);
+});
+
+define('rebuildWeekly', async ({ payload, context }) => {
+  if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
+  const config = await visibleWeekly(payload?.id);
+  const week = weekFrom(payload?.from);
+  await queueWeekly(config, week);
+  return weekSummary(await loadWeekly(config.id, week.from));
+});
+
+define('saveWeeklyNotes', async ({ payload, context }) => {
+  if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
+  const config = await visibleWeekly(payload?.id);
+  const week = weekFrom(payload?.from);
+  const record = await loadWeekly(config.id, week.from);
+  if (!record?.builtAt) throw new Error('This week hasn’t been built yet.');
+  const notes = sanitizeNotes(payload?.notes);
+  await saveWeekly({ ...record, notes, notesSavedAt: new Date().toISOString() });
+  return notes;
+});
+
+define('publishWeekly', async ({ payload, context }) => {
+  if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
+  if (!(await canPublish())) throw new Error('Only Jira admins and project admins can publish to the portal.');
+  const config = await visibleWeekly(payload?.id);
+  if (payload?.publish && !config.portal) throw new Error('This weekly report isn’t set to show on the portal. A Jira admin can turn it on in Customer Insights settings → Weekly report.');
+  const week = weekFrom(payload?.from);
+  const record = await loadWeekly(config.id, week.from);
+  if (!record?.builtAt) throw new Error('This week hasn’t been built yet.');
+  const saved = await saveWeekly({ ...record, publishedAt: payload?.publish ? new Date().toISOString() : null });
+  console.log(`publishWeekly: ${config.id} ${week.from} ${saved.publishedAt ? 'published' : 'removed'}`);
+  return weekSummary(saved);
 });
 
 // ---- Settings page (jira:adminPage): Jira admins only ------------------------

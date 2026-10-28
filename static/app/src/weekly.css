@@ -1,0 +1,16 @@
+/* Weekly SD report (WeeklyReportView.jsx, WeeklyTab.jsx): shared by the agent page and the portal. */
+.wk-report { display: grid; gap: var(--nq-space-200); }
+.wk-table .wk-num { text-align: right; white-space: nowrap; }
+.wk-table .wk-bar { width: 30%; min-width: 80px; }
+.wk-meter { display: block; height: 6px; background: var(--nq-bg-neutral); border-radius: var(--nq-radius-sm); overflow: hidden; }
+.wk-meter i { display: block; height: 100%; background: var(--nq-bg-brand); }
+.wk-subhead { font-size: 14px; margin: var(--nq-space-150) 0 var(--nq-space-075, 6px); }
+.wk-lines { margin: 0; padding-left: var(--nq-space-250, 20px); display: grid; gap: 4px; }
+.wk-progress { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.wk-pickers { display: flex; flex-wrap: wrap; gap: var(--nq-space-150); align-items: flex-end; }
+.wk-pickers .nq-field { min-width: 220px; margin: 0; }
+.wk-notes { display: grid; gap: var(--nq-space-150); }
+.wk-notes textarea { min-height: 96px; resize: vertical; }
+.wk-actions-edit { display: grid; gap: var(--nq-space-100); }
+.wk-action-row { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto; gap: var(--nq-space-100); align-items: center; }
+@media (max-width: 640px) { .wk-action-row { grid-template-columns: 1fr 1fr; } }

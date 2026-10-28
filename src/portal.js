@@ -7,7 +7,7 @@ import { licenseAllows } from './license.js';
 import { portalView } from './publish.js';
 import { isLive, nextCustomerRefresh } from './live.js';
 import { queueRefresh } from './liveJobs.js';
-import { loadLiveConfig, loadLiveState, loadLogo, loadReport, loadSettings, updateLiveState } from './storage.js';
+import { listWeekly, loadLiveConfig, loadLiveState, loadLogo, loadReport, loadSettings, updateLiveState } from './storage.js';
 
 const ResolverClass = Resolver.default ?? Resolver;
 const resolver = new ResolverClass();
@@ -75,6 +75,30 @@ resolver.define('reportLogos', async ({ payload, context }) => {
   if (!accountId || !(await organisationsOf(accountId)).includes(orgId)) throw new Error('This report isn’t available to you.');
   const [company, customer] = await Promise.all([loadLogo('company'), loadLogo(orgId)]);
   return { company, customer };
+});
+
+// Weekly SD reports (src/weekly.js): the published weeks of every report that
+// is set to show on the portal and covers one of the viewer's organisations.
+// Its own switch, separate from service reports (settings.portalEnabled).
+// Every week's agent notes are shown; nothing else is held back.
+const portalWeek = (r) => ({
+  id: r.id, name: r.name, week: r.week, previousWeek: r.previousWeek, timeZone: r.timeZone, builtAt: r.builtAt, publishedAt: r.publishedAt,
+  organizations: r.organizations, fields: r.fields, activity: r.activity, categories: r.categories, subcategories: r.subcategories, workload: r.workload, notes: r.notes,
+});
+
+resolver.define('myWeeklyReports', async ({ context }) => {
+  if (!licenseAllows(context)) return { available: false, reports: [] };
+  const reports = ((await loadSettings()).weekly?.reports || []).filter((r) => r.portal);
+  const accountId = viewer(context);
+  if (!reports.length || !accountId) return { available: reports.length > 0, reports: [] };
+  const mine = new Set(await organisationsOf(accountId));
+  const shown = reports.filter((r) => r.organizations.some((o) => mine.has(o.id)));
+  const weeks = await Promise.all(shown.map((r) => listWeekly(r.id)));
+  return {
+    available: true,
+    reports: shown.map((r, i) => ({ id: r.id, name: r.name, weeks: weeks[i].filter((w) => w.publishedAt && w.builtAt).map(portalWeek) }))
+      .filter((r) => r.weeks.length),
+  };
 });
 
 export const handler = resolver.getDefinitions();

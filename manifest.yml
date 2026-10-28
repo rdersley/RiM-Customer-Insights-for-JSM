@@ -35,6 +35,16 @@ modules:
       viewportSize: large
       unlicensedAccess:
         - customer
+    # Weekly SD reports (src/weekly.js): published weeks for the viewer's
+    # organisations, with an Excel download. Same portal function.
+    - key: customer-insights-weekly-report
+      title: Weekly SD report
+      resource: weekly
+      resolver:
+        function: portal-resolver
+      viewportSize: xlarge
+      unlicensedAccess:
+        - customer
   # Live portal reports (src/liveJobs.js): an hourly check queues the reports
   # that are due; the consumer refreshes one organisation per event.
   scheduledTrigger:
@@ -75,6 +85,8 @@ resources:
     path: static/portal/build
   - key: settings
     path: static/settings/build
+  - key: weekly
+    path: static/weekly/build
 app:
   runtime:
     name: nodejs22.x

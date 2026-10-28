@@ -262,3 +262,36 @@ export async function scrubAccountIds() {
   }
   return cleaned;
 }
+
+// Weekly SD report (src/weekly.js, weeklyJobs.js): one record per report and
+// week, holding the figures, the agents' notes and whether it's on the portal.
+const weeklyPrefix = (reportId) => `weekly:${String(reportId).replace(/[^a-z0-9-]/gi, '')}:`;
+const weeklyKey = (reportId, from) => `${weeklyPrefix(reportId)}${String(from).replace(/[^0-9-]/g, '')}`;
+
+export async function loadWeekly(reportId, from) {
+  return (await (await kvs()).get(weeklyKey(reportId, from))) || null;
+}
+
+export async function saveWeekly(record) {
+  await (await kvs()).set(weeklyKey(record.id, record.week.from), record);
+  return record;
+}
+
+export async function deleteWeekly(reportId, from) {
+  await (await kvs()).delete(weeklyKey(reportId, from));
+}
+
+/** A weekly report's stored weeks (every report's without an id), newest first. */
+export async function listWeekly(reportId = null) {
+  const { kvs: store, WhereConditions } = await import('@forge/kvs');
+  const records = [];
+  let cursor;
+  do {
+    let query = store.query().where('key', WhereConditions.beginsWith(reportId ? weeklyPrefix(reportId) : 'weekly:')).limit(50);
+    if (cursor) query = query.cursor(cursor);
+    const page = await query.getMany();
+    records.push(...page.results.map((r) => r.value));
+    cursor = page.nextCursor;
+  } while (cursor);
+  return records.sort((a, b) => String(b.week?.from).localeCompare(String(a.week?.from)));
+}

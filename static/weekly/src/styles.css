@@ -1,0 +1,7 @@
+/* Portal weekly report: layout only, tokens only. */
+.nq-page > * + * { margin-top: var(--nq-space-200); }
+.nq-stack + .nq-stack { margin-top: var(--nq-space-400); padding-top: var(--nq-space-300); border-top: 1px solid var(--nq-border); }
+.wp-title { align-items: flex-end; flex-wrap: wrap; gap: var(--nq-space-150); }
+.wp-title h2 { margin: 0; }
+.wp-controls { display: flex; align-items: flex-end; gap: var(--nq-space-150); flex-wrap: wrap; }
+.wp-controls .nq-field { margin: 0; min-width: 220px; }
