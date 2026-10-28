@@ -183,6 +183,17 @@ export async function saveSurgeState(orgId, state) {
   await (await kvs()).set(surgeStateKey(orgId), state);
 }
 
+// AI ticket summaries (src/ticketSummaryJobs.js): the change cursor, backfill progress and last run.
+const TICKET_SUMMARY_KEY = 'ticket-summary-state';
+
+export async function loadTicketSummaryState() {
+  return (await (await kvs()).get(TICKET_SUMMARY_KEY)) || {};
+}
+
+export async function saveTicketSummaryState(state) {
+  await (await kvs()).set(TICKET_SUMMARY_KEY, state);
+}
+
 // Customer health (src/healthJobs.js): the latest score per organisation, with its history.
 const healthKey = (orgId) => `health:${String(orgId).replace(/\D/g, '')}`;
 

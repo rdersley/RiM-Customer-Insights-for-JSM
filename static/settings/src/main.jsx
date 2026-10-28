@@ -20,6 +20,7 @@ import EmailReports from './EmailReports.jsx';
 import CrewNumbers from './CrewNumbers.jsx';
 import SurgeSettings from './SurgeSettings.jsx';
 import HealthSettings from './HealthSettings.jsx';
+import TicketSummarySettings from './TicketSummarySettings.jsx';
 import PdfLogos from './PdfLogos.jsx';
 import WeeklySettings from './WeeklySettings.jsx';
 import rimLogo from './assets/rim-logo.png';
@@ -173,6 +174,10 @@ function App() {
 
       <HealthSettings value={draft.health} organizations={state.organizations || []} canRefresh={!dirty && Boolean(state.settings?.health?.enabled)}
         onChange={(health) => { setSaved(false); setDraft((d) => ({ ...d, health })); }} />
+
+      <TicketSummarySettings value={draft.ticketSummary} organizations={state.organizations || []} fields={state.summaryChoices || []} invoke={invoke}
+        saved={!dirty && Boolean(state.settings?.ticketSummary?.enabled)}
+        onChange={(ticketSummary) => { setSaved(false); setDraft((d) => ({ ...d, ticketSummary })); }} />
 
       <Card title="Customer portal" description="Let Jira admins and project admins publish reviewed reports that customers see under “Service report” in the portal.">
         <label className="cs-check">

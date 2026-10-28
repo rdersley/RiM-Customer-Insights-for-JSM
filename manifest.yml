@@ -55,6 +55,10 @@ modules:
     - key: surge-check
       function: surge-detector
       interval: fiveMinute
+    # AI ticket summaries (src/ticketSummaryJobs.js); does nothing until switched on.
+    - key: ticket-summary-check
+      function: ticket-summarizer
+      interval: fiveMinute
   consumer:
     - key: live-report-consumer
       queue: live-report-refresh
@@ -73,7 +77,11 @@ modules:
     - key: surge-detector
       handler: surgeJobs.scheduler
       timeoutSeconds: 120
-  # Atlassian-hosted Claude for the opt-in AI summary (src/ai.js).
+    - key: ticket-summarizer
+      handler: ticketSummaryJobs.scheduler
+      timeoutSeconds: 280
+  # Atlassian-hosted Claude for the opt-in AI report summary (src/ai.js) and
+  # ticket summaries (src/ticketSummaryAi.js).
   llm:
     - key: insights-llm
       model:

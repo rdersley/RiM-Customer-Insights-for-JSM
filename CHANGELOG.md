@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.35.0 (2026-11-01)
+
+- **AI ticket summaries (Settings → Customers).** For chosen organisations, the app writes 2-4 plain sentences on what a ticket is about, what has been done and where it stands into a text field the admin picks, so Excel Report Manager and other exports can show it (Ryanair: email subject lines make poor ticket titles). A five-minute job summarises tickets that changed and have been quiet for 10 minutes; "Summarise existing tickets" works through the last N days in the background with progress shown. Only the title, request type, status, description and comments shared with the customer are sent (the service desk comments API with public=true&internal=false), never internal comments. A marker on each ticket (issue property retailinmotion.ticketSummary) skips tickets whose customer-visible text hasn't changed, so the app's own edit and internal comments cost no AI calls. The field is edited without notifications. No new permissions.
+
 ## 1.34.0 (2026-10-29)
 
 - **Weekly SD report: insights and actions fill themselves in.** When a week is built, Atlassian-hosted Claude writes 3–6 insights and up to 5 suggested actions from the week's figures (backlog, % resolved, categories and subcategories, workload) and a few ticket summaries per top category. Last week's actions that aren't Done carry over with their owner, due date and status. In the editor, actions are labelled "Suggested by AI" or "Carried over from last week". Agents review, edit and save before publishing.
