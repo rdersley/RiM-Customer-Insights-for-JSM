@@ -13,6 +13,7 @@ import { EffortCard, FlowCard, KnowledgeCard, SlaCard } from './WorkloadCards.js
 import TeamPerformance from './TeamPerformance.jsx';
 import EscalationCard from './EscalationCard.jsx';
 import DispatchCard from './DispatchCard.jsx';
+import WeeklyTab from './WeeklyTab.jsx';
 import { ErrorBoundary, Safe } from './ErrorBoundary.jsx';
 import { HealthBoard, HealthCard } from './HealthCards.jsx';
 import { healthOf } from '../../../src/health.js';
@@ -653,8 +654,8 @@ function App() {
       subtitle="See recurring issues and what’s changing across a customer’s tickets."
       version={version}
       actions={<>
-        {report && <Button onClick={downloadPdf} disabled={pdfBusy}>{pdfBusy ? 'Creating PDF…' : 'Export PDF'}</Button>}
-        {report && <Button onClick={exportCsv}>Export CSV</Button>}
+        {report && mode !== 'weekly' && <Button onClick={downloadPdf} disabled={pdfBusy}>{pdfBusy ? 'Creating PDF…' : 'Export PDF'}</Button>}
+        {report && mode !== 'weekly' && <Button onClick={exportCsv}>Export CSV</Button>}
         {licensed && (presenting
           ? <Button appearance="subtle" onClick={stopPresenting}>Stop presenting</Button>
           : <Button appearance="subtle" onClick={() => setPresentPick(selectedOrg?.id || '')}>Present to a client</Button>)}
@@ -724,7 +725,8 @@ function App() {
     {licensed && !presenting && <HealthBoard board={healthBoard} onAnalyse={analyseHealth} canAnalyse={(row) => Boolean(row.period) && !loadingReport && orgs.some((o) => o.id === row.organization.id)} />}
 
     {licensed && <Card>
-      {!presenting && <div className="ci-mode"><Tabs items={[{ id: 'customers', label: 'Customers' }, { id: 'internal', label: 'Internal' }]} active={mode} onChange={setMode} /></div>}
+      {!presenting && <div className="ci-mode"><Tabs items={[{ id: 'customers', label: 'Customers' }, { id: 'internal', label: 'Internal' }, { id: 'weekly', label: 'Weekly report' }]} active={mode} onChange={setMode} /></div>}
+      {mode === 'weekly' ? <WeeklyTab /> : <>
       {internal ? <form className="nq-filters ci-filters" onSubmit={runAnalysis}>
         <Field label={`Projects (${internalProjects.length})`} htmlFor="ci-int-projects">
           <select id="ci-int-projects" className="nq-select" value="" disabled={!projectList}
@@ -815,7 +817,10 @@ function App() {
           ? 'Analyses tickets shared with any of these organisations together, with a breakdown by organisation. Portal reports need a single organisation.'
           : 'Uses tickets shared with this organisation.'} Results follow your Jira permissions.
       </p>}
+      </>}
     </Card>}
+
+    {mode !== 'weekly' && <>
 
     {error && <Notice kind="error" title="We couldn’t complete that request.">{error}</Notice>}
 
@@ -1113,6 +1118,8 @@ function App() {
       {queryOpen && <Notice title="Data source">
         Jira issues with <code>{report.baseJql?.split(' AND created')[0] || `organizations = "${report.organization}"`}</code>, created between {report.startDate} and {report.endDate}. A preceding equal-length period is used for comparison. Only tickets visible to your Jira account are included.
       </Notice>}
+    </>}
+
     </>}
 
     <Footer product={PRODUCT} version={version} />

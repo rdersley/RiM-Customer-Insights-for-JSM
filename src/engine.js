@@ -100,6 +100,33 @@ export async function searchPage(jql, maxResults, nextPageToken, breakdowns = []
   return { issues, nextPageToken: result.nextPageToken };
 }
 
+/** Status (or other field) history for tickets, 1,000 a call, until `deadline`. */
+export async function fetchHistories(issues, fieldIds, deadline, mode = 'user') {
+  const histories = new Map();
+  let complete = true;
+  for (let i = 0; i < issues.length && complete; i += 1000) {
+    const ids = issues.slice(i, i + 1000).map((issue) => String(issue.id)).filter(Boolean);
+    let token;
+    do {
+      if (Date.now() > deadline) { complete = false; break; }
+      const page = await readJson(await requestWithRetry(() => jira(mode).requestJira(route`/rest/api/3/changelog/bulkfetch`, {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ issueIdsOrKeys: ids, fieldIds, maxResults: 1000, ...(token ? { nextPageToken: token } : {}) }),
+      })), 'Ticket history');
+      for (const log of page.issueChangeLogs || []) {
+        const list = histories.get(String(log.issueId)) || [];
+        list.push(...(log.changeHistories || []));
+        histories.set(String(log.issueId), list);
+      }
+      token = page.nextPageToken;
+    } while (token);
+  }
+  // The bulk API can repeat histories across pages.
+  for (const [id, list] of histories) histories.set(id, [...new Map(list.map((h, n) => [h.id ?? `i${n}`, h])).values()]);
+  return { histories, complete };
+}
+
 /** Runs async tasks with at most `limit` in flight, keeping result order. */
 export async function pool(tasks, limit) {
   const results = new Array(tasks.length);

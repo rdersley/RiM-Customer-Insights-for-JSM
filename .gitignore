@@ -146,3 +146,5 @@ vite.config.ts.timestamp-*
 static/app/build/
 static/portal/build/
 static/settings/build/
+static/weekly/build/
+

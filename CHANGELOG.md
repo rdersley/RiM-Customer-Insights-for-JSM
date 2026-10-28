@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.33.0 (2026-10-28)
+
+- **Weekly SD report** (requested by Ryanair): a report for last week, Monday to Sunday in Irish time, built by a background job early every Monday and kept for 12 weeks. A Jira admin sets it up in Settings → Weekly report: a name, up to 10 organisations (e.g. Ryanair and Ryanair Crew), optional projects, a category field and an optional subcategory field (a cascading category gives its second level). Sections follow the customer's layout:
+  - **Key metrics:** open tickets (at the end of the week), created and resolved last week, % resolved last week and week on week, for all organisations together and for each. % resolved = resolved in the week ÷ (open at the start of the week + created in it). Open counts are Jira's count of unresolved tickets now, wound back with the tickets created and resolved since.
+  - **Top issues:** tickets created last week by category, with the week before, and the biggest category by subcategory.
+  - **Workload to resolve tickets** (the KPI Ryanair asked for): for tickets resolved last week, by category, handling time (time in handling statuses from each ticket's history, using the AHT handling statuses), time per ticket, share of the work, status changes and reassignments per ticket, and logged work.
+  - **Insights, action register (action, owner, due, status) and progress** (completed this week, in progress, next steps), written by agents per week. They survive a rebuild.
+- New **Weekly report** tab on the Customer Insights page: pick a report and week, Rebuild / Build now, edit and save the notes, **Download Excel**, and (Jira admins and project admins) **Publish to portal** / Remove.
+- New portal menu item **Weekly SD report**: customers in any of the report's organisations see each published week and can download it as **Excel**. Switched on per report, separately from service reports.
+- Excel files (Key metrics, Top issues, Workload, Action register, Insights and progress) are built in the browser by a small built-in writer (src/xlsx.js); nothing leaves Atlassian. No new scopes.
+
 ## 1.31.1 (2026-10-20)
 
 - **Settings → Internal:** the default view lists every set of project settings with its projects and whether Escalation levels and Hardware dispatch are on, with an Open button, and says that both are set per project. They were easy to miss behind the Editing dropdown.

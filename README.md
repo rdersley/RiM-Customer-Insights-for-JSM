@@ -15,6 +15,7 @@ A Forge app that finds the recurring issues behind a customer organisation's tic
 - **Breakdowns and data quality**: up to 5 admin-chosen fields (for example base or device type), with drill-down, and the share of tickets with no value or a placeholder such as "Unknown".
 - **Customer health** (list off by default): a 0–100 score per customer from volume, rising issues, SLAs, aged backlog and satisfaction, on each customer report and, for organisations an admin lists, ranked on the main page once a day. Internal only.
 - **Spike alerts** (off by default): once a day, watched organisations' last 7 days are compared with the 7 before. Jumps show in the app and, if an admin switches it on, as Jira tickets in a chosen project.
+- **Weekly SD report**: last week's key metrics (open, created, resolved, % resolved and week on week), top issues by category and subcategory, the workload to resolve tickets, and the account team's insights, action register and progress, for a set of organisations. Built every Monday (Irish time), kept 12 weeks, downloadable as Excel, and optionally published to the portal under **Weekly SD report**.
 - **Customer portal** (off by default): an agent reviews names, summary and next steps and publishes. The app then builds the customer's report from that organisation's own tickets: counts, trends, time to resolve, recent requests linking to the portal, and the breakdowns an admin marks **Show on portal**. Customers only ever see reports for organisations they belong to.
 
 ## Settings
@@ -29,11 +30,11 @@ Jira settings → Apps → Customer Insights (Jira admins): breakdown fields and
 | `read:servicedesk-request` | Service desks, for portal request links |
 | `read:organization:jira-service-management` | Organisations, and which ones a portal customer belongs to |
 | `write:jira-work` | Only spike alert tickets, when an admin switches them on |
-| `storage:app` | Settings, published portal reports, alerts |
+| `storage:app` | Settings, published portal reports, weekly reports, alerts |
 
 Email reports: when a Jira admin sets them up, the app's only outside connection is to Microsoft 365 (login.microsoftonline.com for an app-only token, graph.microsoft.com to send mail from the admin's chosen mailbox). Emails carry the report PDF to the recipients listed in each schedule. The client secret is kept with Forge secret storage (encrypted, never sent to a page, not in backups).
 
-Stored in Forge storage: email schedules, recipients and the last 50 sends; settings (including crew numbers per base: counts only; crew lists are read in the admin's browser and names or contact details are never uploaded), published portal reports (counts, trends, the agent's text, up to 5 example ticket keys and summaries per issue) spike and surge alerts (kept 30 days), and the open surges per watched organisation. No account ids are stored. Everything is deleted when the app is uninstalled.
+Stored in Forge storage: email schedules, recipients and the last 50 sends; settings (including crew numbers per base: counts only; crew lists are read in the admin's browser and names or contact details are never uploaded), published portal reports (counts, trends, the agent's text, up to 5 example ticket keys and summaries per issue) spike and surge alerts (kept 30 days), weekly reports (counts by organisation and category, and the agents' notes; kept 12 weeks), and the open surges per watched organisation. No account ids are stored. Everything is deleted when the app is uninstalled.
 
 ## Develop
 
@@ -60,6 +61,6 @@ src/alerts.js           Spike alerts
 src/health.js, healthJobs.js  Customer health score and the daily all-customers list
 src/live.js, liveJobs.js  Portal report builds and the hourly scheduler
 src/publish.js          Snapshot validation (what customers can receive)
-static/app|portal|settings  React UIs (Retail inMotion UI kit)
+static/app|portal|settings|weekly  React UIs (Retail inMotion UI kit)
 test/                   node --test
 ```
