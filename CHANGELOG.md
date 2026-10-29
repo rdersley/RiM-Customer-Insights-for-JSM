@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.34.0 (2026-10-29)
+
+- **Weekly SD report: insights and actions fill themselves in.** When a week is built, Atlassian-hosted Claude writes 3–6 insights and up to 5 suggested actions from the week's figures (backlog, % resolved, categories and subcategories, workload) and a few ticket summaries per top category. Last week's actions that aren't Done carry over with their owner, due date and status. In the editor, actions are labelled "Suggested by AI" or "Carried over from last week". Agents review, edit and save before publishing.
+- Until agents save their own notes, a rebuild rewrites the suggestions. After that their notes are kept, and **Use AI suggestions** loads the latest ones into the editor. If the AI step fails, the build still finishes, keeps the carried actions and shows why.
+- Settings → Weekly report: "Write insights and suggest actions with AI" (on by default, per report). No new scopes: the app already uses Forge LLMs.
+
 ## 1.33.0 (2026-10-28)
 
 - **Weekly SD report** (requested by Ryanair): a report for last week, Monday to Sunday in Irish time, built by a background job early every Monday and kept for 12 weeks. A Jira admin sets it up in Settings → Weekly report: a name, up to 10 organisations (e.g. Ryanair and Ryanair Crew), optional projects, a category field and an optional subcategory field (a cascading category gives its second level). Sections follow the customer's layout:

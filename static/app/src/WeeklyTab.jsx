@@ -1,7 +1,8 @@
 // "Weekly report" tab: a Weekly SD report (settings → Weekly report) for one of
 // the last 12 weeks. Weeks are built by a background job on Monday; agents can
-// rebuild a week, write the insights, action register and progress, download
-// it as Excel, and (Jira admins and project admins) publish it to the portal.
+// rebuild a week, review the insights and actions the build wrote (AI
+// suggestions and last week's open actions), write the progress, download it
+// as Excel, and (Jira admins and project admins) publish it to the portal.
 import React, { useEffect, useState } from 'react';
 import { invoke } from '@forge/bridge';
 import { Button, Card, EmptyState, Field, Loading, Lozenge, Notice } from '@retailinmotion/ui/react';
@@ -30,6 +31,7 @@ function NotesEditor({ notes, onChange }) {
           {ACTION_STATUSES.map((s) => <option key={s}>{s}</option>)}
         </select>
         <Button small appearance="subtle" onClick={() => set({ actions: notes.actions.filter((_, n) => n !== i) })}>Remove</Button>
+        {a.source && <span className="wk-action-source"><Lozenge kind={a.source === 'ai' ? 'discovery' : 'neutral'}>{a.source === 'ai' ? 'Suggested by AI' : 'Carried over from last week'}</Lozenge></span>}
       </div>)}
       <div><Button small disabled={notes.actions.length >= NOTE_LIMITS.actions} onClick={() => set({ actions: [...notes.actions, { action: '', owner: '', due: '', status: 'Open' }] })}>Add action</Button></div>
     </div>
@@ -133,7 +135,12 @@ export default function WeeklyTab() {
         Built {when(record.builtAt)}{record.notesSavedAt ? ` · notes saved ${when(record.notesSavedAt)}` : ''} · {record.publishedAt ? <Lozenge kind="success">On the portal since {when(record.publishedAt)}</Lozenge> : <Lozenge>Not on the portal</Lozenge>}
       </p>
       <WeeklyReportView record={{ ...record, notes }} hideNotes />
-      <Card title="Insights, actions and progress" description="Written by the account team for this week. Shown on the report, the portal and in Excel.">
+      <Card title="Insights, actions and progress" description="Insights and actions are filled in when the week is built: AI-written insights and suggested actions from the figures, and last week's open actions carried over. Review and edit them, add the progress, and save. Shown on the report, the portal and in Excel.">
+        {record.suggested?.error && <Notice kind="warning" title="AI insights couldn’t be written for this build.">{record.suggested.error} Last week’s open actions were still carried over. Rebuild to try again.</Notice>}
+        {record.suggested && !record.suggested.error && <div className="nq-spread">
+          <span className="nq-muted">{record.notesSavedAt ? `AI suggestions from the latest build (${when(record.suggested.at)}) are kept aside; your saved notes are shown.` : `Written by AI ${when(record.suggested.at)}. Not reviewed yet: check them before publishing.`}</span>
+          {record.notesSavedAt && <Button small onClick={() => setNotes((n) => ({ ...n, insights: record.suggested.insights, actions: record.suggested.actions }))}>Use AI suggestions</Button>}
+        </div>}
         <NotesEditor notes={notes} onChange={setNotes} />
         <div className="nq-spread">
           <span className="nq-muted">{dirty ? 'Unsaved changes' : ''}</span>

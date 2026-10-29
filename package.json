@@ -1,6 +1,6 @@
 {
   "name": "retailinmotion-customer-insights",
-  "version": "1.33.0",
+  "version": "1.34.0",
   "private": true,
   "type": "module",
   "description": "Customer ticket trend analysis for Jira Service Management Cloud",
@@ -8,7 +8,7 @@
     "build": "npm run build:ui",
     "build:ui": "vite build --config static/app/vite.config.js && vite build --config static/portal/vite.config.js && vite build --config static/settings/vite.config.js && vite build --config static/weekly/vite.config.js",
     "test": "node --test --experimental-test-module-mocks && npm run check:ui",
-    "lint": "node --check src/index.js && node --check src/analysis.js && node --check src/portal.js && node --check src/publish.js && node --check src/settings.js && node --check src/engine.js && node --check src/live.js && node --check src/liveJobs.js && node --check src/alerts.js && node --check src/storage.js && node --check src/timeOfDay.js && node --check src/backup.js && node --check src/pdfReport.js && node --check src/problem.js && node --check src/headcount.js && node --check src/surge.js && node --check src/surgeJobs.js && node --check src/logos.js && node --check src/flow.js && node --check src/sla.js && node --check src/agents.js && node --check src/devices.js && node --check src/escalation.js && node --check src/channels.js && node --check src/email.js && node --check src/graph.js && node --check src/emailJobs.js && node --check src/health.js && node --check src/healthJobs.js && node --check src/sections.js && node --check src/dispatch.js && node --check static/app/src/exportPdf.js && node --check src/weekly.js && node --check src/weeklyJobs.js && node --check src/weeklyExcel.js && node --check src/xlsx.js",
+    "lint": "node --check src/index.js && node --check src/analysis.js && node --check src/portal.js && node --check src/publish.js && node --check src/settings.js && node --check src/engine.js && node --check src/live.js && node --check src/liveJobs.js && node --check src/alerts.js && node --check src/storage.js && node --check src/timeOfDay.js && node --check src/backup.js && node --check src/pdfReport.js && node --check src/problem.js && node --check src/headcount.js && node --check src/surge.js && node --check src/surgeJobs.js && node --check src/logos.js && node --check src/flow.js && node --check src/sla.js && node --check src/agents.js && node --check src/devices.js && node --check src/escalation.js && node --check src/channels.js && node --check src/email.js && node --check src/graph.js && node --check src/emailJobs.js && node --check src/health.js && node --check src/healthJobs.js && node --check src/sections.js && node --check src/dispatch.js && node --check static/app/src/exportPdf.js && node --check src/weekly.js && node --check src/weeklyJobs.js && node --check src/weeklyExcel.js && node --check src/xlsx.js && node --check src/weeklyAi.js",
     "check:ui": "retailinmotion-ui-check static/app/src static/portal/src static/settings/src static/weekly/src"
   },
   "dependencies": {

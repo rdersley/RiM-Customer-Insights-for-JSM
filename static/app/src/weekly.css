@@ -12,5 +12,6 @@
 .wk-notes { display: grid; gap: var(--nq-space-150); }
 .wk-notes textarea { min-height: 96px; resize: vertical; }
 .wk-actions-edit { display: grid; gap: var(--nq-space-100); }
+.wk-action-source { grid-column: 1 / -1; margin-top: -4px; }
 .wk-action-row { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto; gap: var(--nq-space-100); align-items: center; }
 @media (max-width: 640px) { .wk-action-row { grid-template-columns: 1fr 1fr; } }

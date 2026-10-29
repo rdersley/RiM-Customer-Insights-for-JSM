@@ -202,7 +202,7 @@ export function parseMerges(raw, groupCount) {
     .filter((issue) => issue.title && issue.members.length > 0);
 }
 
-async function callTool(chatFn, models, messages, tool) {
+export async function callTool(chatFn, models, messages, tool) {
   let lastError;
   for (const model of models) {
     try {

@@ -121,7 +121,7 @@ test('settings keep only visible organisations and supported fields', () => {
     { name: '', organizations: [{ id: '1' }] },
   ] }, orgs, fields);
   assert.equal(reports.length, 1);
-  assert.deepEqual(reports[0], { id: 'w-ryr01', name: 'Ryanair weekly', organizations: orgs, projects: ['SD', 'HW'], categoryField: { id: 'customfield_1', name: 'RYR Category', kind: 'cascading' }, subcategoryField: null, portal: true });
+  assert.deepEqual(reports[0], { id: 'w-ryr01', name: 'Ryanair weekly', organizations: orgs, projects: ['SD', 'HW'], categoryField: { id: 'customfield_1', name: 'RYR Category', kind: 'cascading' }, subcategoryField: null, portal: true, aiNotes: true });
   assert.match(sanitizeWeekly({ reports: [{ name: 'X', organizations: [{ id: '1' }] }] }, orgs, fields).reports[0].id, /^w-[a-z0-9]+$/);
 });
 
