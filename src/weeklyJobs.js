@@ -10,6 +10,7 @@ import { handlingTimes } from './agents.js';
 import { organisationBreakdown, readValues } from './settings.js';
 import { EMPTY_NOTES, isMonday, lastWeek, previousWeek, stepsOf, weekOf, weeklyReport, weeklyTicket, WEEKS_KEPT } from './weekly.js';
 import { deleteWeekly, listWeekly, loadSettings, loadWeekly, saveWeekly } from './storage.js';
+import { carriedActions, notesAfterBuild, suggestWeeklyNotes } from './weeklyAi.js';
 
 const MAX_TICKETS = 20000;
 const JOB_BUDGET_MS = 600000; // the consumer has 15 minutes
@@ -97,6 +98,21 @@ async function currentOrganisations(config) {
   }));
 }
 
+/** Up to 6 summaries of tickets created in the week, for each of the 5 biggest categories (AI input only; not stored). */
+export function examplesOf(issues, tickets, week) {
+  const byCategory = new Map();
+  tickets.forEach((t, i) => {
+    if (t.created < week.start || t.created >= week.end) return;
+    const list = byCategory.get(t.category) || [];
+    if (list.length < 6 && issues[i]?.fields?.summary) list.push(String(issues[i].fields.summary));
+    byCategory.set(t.category, list);
+  });
+  const counts = new Map();
+  tickets.forEach((t) => { if (t.created >= week.start && t.created < week.end) counts.set(t.category, (counts.get(t.category) || 0) + 1); });
+  const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name]) => name);
+  return Object.fromEntries(top.map((name) => [name, byCategory.get(name) || []]));
+}
+
 export async function buildWeekly(reportId, from) {
   if (!isMonday(from)) return { skipped: 'not a week' };
   const startedAt = Date.now();
@@ -113,7 +129,7 @@ export async function buildWeekly(reportId, from) {
     const scope = scopeJql(config);
     const [fieldList, statuses] = await Promise.all([jiraJson(route`/rest/api/3/field`, 'Field list'), jiraJson(route`/rest/api/3/status`, 'Statuses')]);
     const orgFieldId = organisationBreakdown(fieldList, [])?.id || null;
-    const fields = ['created', 'resolutiondate', 'timespent', 'status', 'assignee', orgFieldId, config.categoryField?.id, config.subcategoryField?.id].filter(Boolean);
+    const fields = ['summary', 'created', 'resolutiondate', 'timespent', 'status', 'assignee', orgFieldId, config.categoryField?.id, config.subcategoryField?.id].filter(Boolean);
     const [issues, openAll, ...openByOrg] = await Promise.all([
       searchAll(`${scope} AND (created >= "${since}" OR resolved >= "${since}")`, fields, deadline),
       countIssues(`${scope} AND resolution = Unresolved`, 'app'),
@@ -138,9 +154,14 @@ export async function buildWeekly(reportId, from) {
       config, week, tickets, effort, handlingStatuses,
       openNow: { all: openAll, byOrg: Object.fromEntries(openByOrg.map((n, i) => [config.organizations[i].name, n])) },
     });
-    // Keep the notes and portal setting agents saved meanwhile.
+    // Insights and actions for the agents: AI suggestions plus last week's open actions.
+    const previous = await loadWeekly(reportId, before.from);
+    const suggested = config.aiNotes === false
+      ? { insights: '', actions: carriedActions(previous), at: new Date().toISOString(), model: null, error: null }
+      : await suggestWeeklyNotes(report, { examples: examplesOf(issues, tickets, week), previous });
+    // Keep the notes agents saved and the portal setting.
     const existing = await loadWeekly(reportId, week.from);
-    await saveWeekly({ notes: EMPTY_NOTES, publishedAt: null, ...existing, ...report, queuedAt: null, lastError: null, lastErrorAt: null });
+    await saveWeekly({ publishedAt: null, ...existing, ...report, notes: notesAfterBuild(existing, suggested), suggested, queuedAt: null, lastError: null, lastErrorAt: null });
     console.log(`weekly: built ${reportId} ${week.from} in ${Date.now() - startedAt}ms, ${issues.length} tickets, ${resolvedIssues.length} resolved (${Object.keys(effort).length} with history)`);
     return { built: true };
   } catch (error) {

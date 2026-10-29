@@ -53,6 +53,11 @@ function ReportEditor({ report, index, organizations, fields, onChange, onRemove
         </Field>
       </div>
       <label className="cs-check">
+        <input type="checkbox" className="nq-check" checked={report.aiNotes !== false} onChange={(e) => set({ aiNotes: e.target.checked })} />
+        <span>Write insights and suggest actions with AI when each week is built</span>
+      </label>
+      <p className="nq-muted">Uses Atlassian-hosted Claude with the week’s figures and a few ticket summaries per category; nothing leaves Atlassian. Last week’s open actions are always carried over. Agents review everything before publishing.</p>
+      <label className="cs-check">
         <input type="checkbox" className="nq-check" checked={report.portal === true} onChange={(e) => set({ portal: e.target.checked })} />
         <span>Show published weeks on the customer portal (“Weekly SD report”)</span>
       </label>
@@ -69,7 +74,7 @@ export default function WeeklySettings({ value, organizations = [], fields = [],
       <div className="nq-spread">
         <span className="nq-muted">{reports.length} of {MAX_WEEKLY_REPORTS} reports. A report needs a name and at least one organisation to be saved.</span>
         <Button small disabled={reports.length >= MAX_WEEKLY_REPORTS}
-          onClick={() => onChange({ reports: [...reports, { name: '', organizations: [], projects: [], categoryField: null, subcategoryField: null, portal: false }] })}>Add a weekly report</Button>
+          onClick={() => onChange({ reports: [...reports, { name: '', organizations: [], projects: [], categoryField: null, subcategoryField: null, portal: false, aiNotes: true }] })}>Add a weekly report</Button>
       </div>
     </Card>
     {reports.map((r, i) => <ReportEditor key={r.id || `new-${i}`} report={r} index={i} organizations={organizations} fields={fields}

@@ -108,6 +108,8 @@ export function sanitizeWeekly(input, organizations = [], selectable = []) {
       // A cascading category already holds its subcategory.
       subcategoryField: subcategoryField && subcategoryField.id !== categoryField?.id ? subcategoryField : null,
       portal: r?.portal === true,
+      // Insights and suggested actions written by AI at each build (src/weeklyAi.js).
+      aiNotes: r?.aiNotes !== false,
     };
   }).filter(Boolean).slice(0, MAX_WEEKLY_REPORTS);
   return { reports };
@@ -121,6 +123,8 @@ export function sanitizeNotes(input) {
     owner: clip(a?.owner, NOTE_LIMITS.owner),
     due: clip(a?.due, NOTE_LIMITS.due),
     status: ACTION_STATUSES.includes(a?.status) ? a.status : 'Open',
+    // Where a suggested action came from (src/weeklyAi.js); agents' own have none.
+    ...(['ai', 'carried'].includes(a?.source) ? { source: a.source } : {}),
   })).filter((a) => a.action).slice(0, NOTE_LIMITS.actions);
   return { insights: text(input?.insights), actions, completed: text(input?.completed), inProgress: text(input?.inProgress), nextSteps: text(input?.nextSteps) };
 }
