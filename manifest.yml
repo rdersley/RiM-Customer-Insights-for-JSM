@@ -52,12 +52,11 @@ modules:
       function: live-scheduler
       interval: hour
     # Live surge detection (src/surgeJobs.js); does nothing until switched on.
+    # Forge allows one fiveMinute trigger per app, so it runs both five-minute
+    # jobs (src/fiveMinuteJobs.js): live surge detection, then AI ticket
+    # summaries. Each does nothing until switched on.
     - key: surge-check
       function: surge-detector
-      interval: fiveMinute
-    # AI ticket summaries (src/ticketSummaryJobs.js); does nothing until switched on.
-    - key: ticket-summary-check
-      function: ticket-summarizer
       interval: fiveMinute
   consumer:
     - key: live-report-consumer
@@ -75,10 +74,7 @@ modules:
       handler: liveJobs.consumer
       timeoutSeconds: 900
     - key: surge-detector
-      handler: surgeJobs.scheduler
-      timeoutSeconds: 120
-    - key: ticket-summarizer
-      handler: ticketSummaryJobs.scheduler
+      handler: fiveMinuteJobs.scheduler
       timeoutSeconds: 280
   # Atlassian-hosted Claude for the opt-in AI report summary (src/ai.js) and
   # ticket summaries (src/ticketSummaryAi.js).
