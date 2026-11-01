@@ -1,5 +1,5 @@
-// Forge handler for AI ticket summaries (src/ticketSummary.js). Every five
-// minutes: summarise tickets from the chosen organisations that changed and
+// AI ticket summaries (src/ticketSummary.js), run from the five-minute trigger
+// (src/fiveMinuteJobs.js): summarise tickets from the chosen organisations that changed and
 // have been quiet for a while, then spend any time left on the "summarise
 // existing tickets" backfill. Reads and writes Jira as the app.
 import { asApp, route } from '@forge/api';
@@ -97,12 +97,12 @@ async function processPage(issues, config, deps, tally, deadline, clock) {
   return processed === issues.length;
 }
 
-export async function runOnce({ jira = appJira(), store = storage, summarise = summariseTicket, clock = Date.now } = {}) {
+export async function runOnce({ jira = appJira(), store = storage, summarise = summariseTicket, clock = Date.now, budgetMs = BUDGET_MS } = {}) {
   const settings = await store.loadSettings();
   const config = settings.ticketSummary;
   if (!ready(config)) return null;
   const startedAt = clock();
-  const deadline = startedAt + BUDGET_MS;
+  const deadline = startedAt + budgetMs;
   const state = await store.loadTicketSummaryState();
   const tally = { summarised: 0, unchanged: 0, empty: 0, failed: 0, lastError: state.last?.lastError || '' };
   const deps = { jira, summarise };
@@ -153,4 +153,3 @@ export async function runOnce({ jira = appJira(), store = storage, summarise = s
   return last;
 }
 
-export const scheduler = async () => { await runOnce(); };

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.35.1 (2026-11-01)
+
+- **Fix: 1.35.0 couldn't be deployed.** Forge allows only one five-minute scheduled trigger per app, and live surge detection already had it. Ticket summaries now run from the same trigger (src/fiveMinuteJobs.js): surge detection first, then summaries with the time left in the run. A failure in one doesn't stop the other.
+
 ## 1.35.0 (2026-11-01)
 
 - **AI ticket summaries (Settings → Customers).** For chosen organisations, the app writes 2-4 plain sentences on what a ticket is about, what has been done and where it stands into a text field the admin picks, so Excel Report Manager and other exports can show it (Ryanair: email subject lines make poor ticket titles). A five-minute job summarises tickets that changed and have been quiet for 10 minutes; "Summarise existing tickets" works through the last N days in the background with progress shown. Only the title, request type, status, description and comments shared with the customer are sent (the service desk comments API with public=true&internal=false), never internal comments. A marker on each ticket (issue property retailinmotion.ticketSummary) skips tickets whose customer-visible text hasn't changed, so the app's own edit and internal comments cost no AI calls. The field is edited without notifications. No new permissions.
