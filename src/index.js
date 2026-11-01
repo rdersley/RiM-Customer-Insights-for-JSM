@@ -26,6 +26,8 @@ import { channelOf } from './channels.js';
 import { emailList, MAX_SCHEDULES, sanitizeEmailConfig, sanitizeSchedule } from './email.js';
 import { loadEmailConfig, loadEmailLog, loadEmailSecret, loadSchedules, loadScheduleState, saveEmailConfig, saveEmailSecret, saveSchedules } from './storage.js';
 import { searchWords } from './surge.js';
+import { summaryFieldChoices } from './ticketSummary.js';
+import { loadTicketSummaryState, saveTicketSummaryState } from './storage.js';
 import { isMonday, lastWeek, sanitizeNotes, weekOf, WEEKS_KEPT } from './weekly.js';
 import { queueWeekly } from './weeklyJobs.js';
 import { listWeekly, loadWeekly, saveWeekly } from './storage.js';
@@ -806,7 +808,7 @@ async function siteFields() {
 async function siteFieldLists() {
   const response = await asUser().requestJira(route`/rest/api/3/field`, { headers: { Accept: 'application/json' } });
   const all = await readJson(response, 'Field list');
-  return { selectable: selectableFields(all), slaChoices: slaFieldChoices(all), idChoices: deviceIdChoices(all) };
+  return { selectable: selectableFields(all), slaChoices: slaFieldChoices(all), idChoices: deviceIdChoices(all), summaryChoices: summaryFieldChoices(all) };
 }
 
 /** The id of the alert ticket's issue type, checked against the project. */
@@ -871,13 +873,14 @@ define('createProblem', async ({ payload, context }) => {
 define('getSettings', async ({ context }) => {
   if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
   if (!(await isJiraAdmin())) return { isAdmin: false };
-  const [settings, { selectable: fields, slaChoices, idChoices }, organizations] = await Promise.all([loadSettings(), siteFieldLists(), listOrganizations()]);
+  const [settings, { selectable: fields, slaChoices, idChoices, summaryChoices }, organizations] = await Promise.all([loadSettings(), siteFieldLists(), listOrganizations()]);
   return {
     isAdmin: true,
     settings,
     fields,
     slaChoices,
     idChoices,
+    summaryChoices,
     organizations,
   };
 });
@@ -885,14 +888,46 @@ define('getSettings', async ({ context }) => {
 define('saveSettings', async ({ payload, context }) => {
   if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
   if (!(await isJiraAdmin())) throw new Error('Only Jira admins can change Customer Insights settings.');
-  const [{ selectable: fields, slaChoices, idChoices }, organizations] = await Promise.all([siteFieldLists(), listOrganizations()]);
-  const settings = sanitizeSettings(payload?.settings, fields, organizations, { slaChoices, idChoices });
+  const [{ selectable: fields, slaChoices, idChoices, summaryChoices }, organizations] = await Promise.all([siteFieldLists(), listOrganizations()]);
+  const settings = sanitizeSettings(payload?.settings, fields, organizations, { slaChoices, idChoices, summaryChoices });
   if (settings.alerts.createIssue) settings.alerts.issueTypeId = await alertIssueType(settings.alerts);
   if (settings.surge.enabled && settings.surge.createIssue) settings.surge.issueTypeId = await alertIssueType(settings.surge);
   await saveSettings(settings);
   const { alerts } = settings;
-  console.log(`saveSettings: ${settings.breakdowns.length} breakdowns, ${settings.internalBreakdowns.length} internal breakdowns, ${settings.projectProfiles.length} project settings, ${settings.slaFields.length} SLAs, ${settings.clientFields.length} client fields, ${settings.headcounts.length} crew lists, surge ${settings.surge.enabled ? `on (${settings.surge.organizations.length} orgs, tickets ${settings.surge.createIssue ? settings.surge.projectKey : 'off'})` : 'off'}, health ${settings.health.enabled ? `on (${settings.health.organizations.length} orgs)` : "off"}, portal ${settings.portalEnabled ? 'on' : 'off'}, alerts ${alerts.enabled ? `on (${alerts.organizations.length} orgs, tickets ${alerts.createIssue ? alerts.projectKey : 'off'})` : 'off'}`);
+  console.log(`saveSettings: ${settings.breakdowns.length} breakdowns, ${settings.internalBreakdowns.length} internal breakdowns, ${settings.projectProfiles.length} project settings, ${settings.slaFields.length} SLAs, ${settings.clientFields.length} client fields, ${settings.headcounts.length} crew lists, surge ${settings.surge.enabled ? `on (${settings.surge.organizations.length} orgs, tickets ${settings.surge.createIssue ? settings.surge.projectKey : 'off'})` : 'off'}, health ${settings.health.enabled ? `on (${settings.health.organizations.length} orgs)` : "off"}, ticket summaries ${settings.ticketSummary.enabled ? `on (${settings.ticketSummary.organizations.length} orgs, field ${settings.ticketSummary.fieldId || 'none'})` : 'off'}, portal ${settings.portalEnabled ? 'on' : 'off'}, alerts ${alerts.enabled ? `on (${alerts.organizations.length} orgs, tickets ${alerts.createIssue ? alerts.projectKey : 'off'})` : 'off'}`);
   return settings;
+});
+
+// ---- AI ticket summaries (settings page): Jira admins only ----------------------
+
+const summaryStatus = (state) => ({ last: state.last || null, backfill: state.backfill || null, totalSummarised: state.totalSummarised || 0 });
+
+define('ticketSummaryStatus', async ({ context }) => {
+  if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
+  if (!(await isJiraAdmin())) throw new Error('Only Jira admins can see ticket summary progress.');
+  return summaryStatus(await loadTicketSummaryState());
+});
+
+// Summarise existing tickets: the scheduled job works through them a page at a time.
+define('startTicketSummaryBackfill', async ({ context }) => {
+  if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
+  if (!(await isJiraAdmin())) throw new Error('Only Jira admins can start ticket summaries.');
+  const { ticketSummary: config } = await loadSettings();
+  if (!config?.enabled || !config.organizations?.length || !config.fieldId) throw new Error('Turn on ticket summaries, pick organisations and a field, and save first.');
+  const state = await loadTicketSummaryState();
+  const backfill = { running: true, days: config.backfillDays, nextPageToken: '', checked: 0, summarised: 0, failed: 0, startedAt: new Date().toISOString(), finishedAt: null };
+  await saveTicketSummaryState({ ...state, backfill });
+  console.log(`ticketSummary: backfill started, ${config.backfillDays} days, ${config.organizations.length} orgs`);
+  return summaryStatus({ ...state, backfill });
+});
+
+define('stopTicketSummaryBackfill', async ({ context }) => {
+  if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
+  if (!(await isJiraAdmin())) throw new Error('Only Jira admins can stop ticket summaries.');
+  const state = await loadTicketSummaryState();
+  const backfill = state.backfill ? { ...state.backfill, running: false, finishedAt: new Date().toISOString() } : null;
+  await saveTicketSummaryState({ ...state, backfill });
+  return summaryStatus({ ...state, backfill });
 });
 
 // ---- PDF logos (settings page): Jira admins only -------------------------------
