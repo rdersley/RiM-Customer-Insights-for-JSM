@@ -57,3 +57,21 @@ test('examples: summaries of tickets created in the week for the biggest categor
   const issues = tickets.map((_, i) => ({ fields: { summary: `S${i}` } }));
   assert.deepEqual(examplesOf(issues, tickets, week), { Device: ['S0', 'S1'], Login: ['S2'] });
 });
+
+test('progress boxes: written from last week\'s register and progress, kept until agents save', async () => {
+  const last = { notes: sanitizeNotes({ actions: [{ action: 'Swap card readers at STN', status: 'In progress' }, { action: 'Replace STN router', status: 'Done' }], nextSteps: '- Review Device tickets\n- Train new starters' }) };
+  const input = weeklyAiInput(report, { openActions: carriedActions(last), lastWeek: { done: [{ action: 'Replace STN router' }], open: carriedActions(last), inProgress: '', nextSteps: last.notes.nextSteps } });
+  assert.deepEqual(input.lastWeek.actionsDone, ['Replace STN router']);
+  assert.deepEqual(input.lastWeek.nextSteps, ['Review Device tickets', 'Train new starters']);
+  assert.equal(weeklyAiInput(report).lastWeek, null);
+  const prompts = [];
+  const chatFn = async (p) => { prompts.push(p); return reply({ insights: ['x'], actions: [], completed: ['Replaced the STN router', ' '], inProgress: ['Swapping card readers at STN'], nextSteps: Array(8).fill('Step') })(p); };
+  const s = await suggestWeeklyNotes(report, { previous: last, chatFn, models: ['claude-sonnet-5'], at: 'T' });
+  assert.equal(s.completed, 'Replaced the STN router');
+  assert.equal(s.inProgress, 'Swapping card readers at STN');
+  assert.equal(s.nextSteps.split('\n').length, 5);
+  assert.match(prompts[0].messages[1].content, /"actionsDone":\["Replace STN router"\]/);
+  // A build fills the boxes until agents save, and keeps a box the AI left empty.
+  const notes = notesAfterBuild({ notes: { nextSteps: 'agent text' } }, { ...s, nextSteps: '' });
+  assert.deepEqual([notes.completed, notes.inProgress, notes.nextSteps], ['Replaced the STN router', 'Swapping card readers at STN', 'agent text']);
+});

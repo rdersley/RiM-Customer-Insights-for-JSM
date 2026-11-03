@@ -54,7 +54,7 @@ function ReportEditor({ report, index, organizations, fields, onChange, onRemove
       </div>
       <label className="cs-check">
         <input type="checkbox" className="nq-check" checked={report.aiNotes !== false} onChange={(e) => set({ aiNotes: e.target.checked })} />
-        <span>Write insights and suggest actions with AI when each week is built</span>
+        <span>Write insights, suggest actions and draft the progress notes with AI when each week is built</span>
       </label>
       <p className="nq-muted">Uses Atlassian-hosted Claude with the week’s figures and a few ticket summaries per category; nothing leaves Atlassian. Last week’s open actions are always carried over. Agents review everything before publishing.</p>
       <label className="cs-check">
