@@ -139,7 +139,7 @@ export default function WeeklyTab() {
         {record.suggested?.error && <Notice kind="warning" title="AI insights couldn’t be written for this build.">{record.suggested.error} Last week’s open actions were still carried over. Rebuild to try again.</Notice>}
         {record.suggested && !record.suggested.error && <div className="nq-spread">
           <span className="nq-muted">{record.notesSavedAt ? `AI suggestions from the latest build (${when(record.suggested.at)}) are kept aside; your saved notes are shown.` : `Written by AI ${when(record.suggested.at)}. Not reviewed yet: check them before publishing.`}</span>
-          {record.notesSavedAt && <Button small onClick={() => setNotes((n) => ({ ...n, insights: record.suggested.insights, actions: record.suggested.actions }))}>Use AI suggestions</Button>}
+          {record.notesSavedAt && <Button small onClick={() => setNotes((n) => ({ ...n, insights: record.suggested.insights, actions: record.suggested.actions, ...Object.fromEntries(['completed', 'inProgress', 'nextSteps'].filter((k) => record.suggested[k]).map((k) => [k, record.suggested[k]])) }))}>Use AI suggestions</Button>}
         </div>}
         <NotesEditor notes={notes} onChange={setNotes} />
         <div className="nq-spread">

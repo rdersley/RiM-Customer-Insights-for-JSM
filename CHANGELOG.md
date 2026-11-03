@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.36.0 (2026-11-03)
+
+- **Weekly SD report: AI drafts the progress notes too.** Completed this week, In progress and Next steps (up to 5 lines each) are written with the insights and actions when a week is built. Completed uses last week's actions now marked Done and results the figures show (backlog down, % resolved up), never work that isn't in the data; In progress uses actions still open and last week's next steps not yet done; Next steps comes from the open and suggested actions. Like the insights, they fill the boxes until agents save their own notes; after that, Use AI suggestions loads them. Agents review before publishing. Same setting (Settings → Weekly report), now "Write insights, suggest actions and draft the progress notes with AI".
+
 ## 1.35.1 (2026-11-01)
 
 - **Fix: 1.35.0 couldn't be deployed.** Forge allows only one five-minute scheduled trigger per app, and live surge detection already had it. Ticket summaries now run from the same trigger (src/fiveMinuteJobs.js): surge detection first, then summaries with the time left in the run. A failure in one doesn't stop the other.

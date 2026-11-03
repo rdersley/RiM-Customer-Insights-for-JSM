@@ -157,7 +157,7 @@ export async function buildWeekly(reportId, from) {
     // Insights and actions for the agents: AI suggestions plus last week's open actions.
     const previous = await loadWeekly(reportId, before.from);
     const suggested = config.aiNotes === false
-      ? { insights: '', actions: carriedActions(previous), at: new Date().toISOString(), model: null, error: null }
+      ? { insights: '', actions: carriedActions(previous), completed: '', inProgress: '', nextSteps: '', at: new Date().toISOString(), model: null, error: null }
       : await suggestWeeklyNotes(report, { examples: examplesOf(issues, tickets, week), previous });
     // Keep the notes agents saved and the portal setting.
     const existing = await loadWeekly(reportId, week.from);
