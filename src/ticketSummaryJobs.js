@@ -4,7 +4,7 @@
 // existing tickets" backfill. Reads and writes Jira as the app.
 import { asApp, route } from '@forge/api';
 import { pool, readJson, requestWithRetry } from './engine.js';
-import { SUMMARY_PROPERTY, backfillJql, changedJql, fieldValue, hasContent, hash, ready, sourceFingerprint, summaryInput } from './ticketSummary.js';
+import { QUIET_MINUTES, SUMMARY_PROPERTY, backfillJql, changedJql, fieldValue, hasContent, hash, ready, sourceFingerprint, summaryInput } from './ticketSummary.js';
 import { summariseTicket } from './ticketSummaryAi.js';
 import * as storage from './storage.js';
 
@@ -59,12 +59,14 @@ export function appJira() {
  * Summarises one ticket if its customer-visible text changed since the last
  * summary. Returns 'summarised', 'unchanged' or 'empty'.
  */
-export async function summariseIssue(issue, config, { jira, summarise = summariseTicket, now = () => new Date() }) {
+export async function summariseIssue(issue, config, deps) {
+  const { jira, summarise = summariseTicket, now = () => new Date() } = deps;
   const marker = issue.properties?.[SUMMARY_PROPERTY] || {};
   const source = sourceFingerprint(issue.fields);
   if (marker.source === source) return 'unchanged';
   const input = summaryInput(issue, await jira.publicComments(issue.key));
   const inputHash = hash(JSON.stringify(input));
+  const sentChars = JSON.stringify(input).length;
   // Only internal comments changed: nothing new for the customer.
   if (marker.input === inputHash) {
     await jira.setProperty(issue.key, { ...marker, source });
@@ -75,6 +77,7 @@ export async function summariseIssue(issue, config, { jira, summarise = summaris
     return 'empty';
   }
   const { summary, model } = await summarise(input);
+  deps.onSent?.(sentChars); // for the run log: what the AI was sent, to watch the cost
   await jira.writeField(issue.key, config.fieldId, fieldValue(summary, config.fieldKind));
   await jira.setProperty(issue.key, { v: 1, source, input: inputHash, at: now().toISOString(), model });
   return 'summarised';
@@ -104,11 +107,11 @@ export async function runOnce({ jira = appJira(), store = storage, summarise = s
   const startedAt = clock();
   const deadline = startedAt + budgetMs;
   const state = await store.loadTicketSummaryState();
-  const tally = { summarised: 0, unchanged: 0, empty: 0, failed: 0, lastError: state.last?.lastError || '' };
-  const deps = { jira, summarise };
+  const tally = { summarised: 0, unchanged: 0, empty: 0, failed: 0, chars: 0, lastError: state.last?.lastError || '' };
+  const deps = { jira, summarise, onSent: (n) => { tally.chars += n; } };
 
   // 1. Tickets changed since the last run (with a few minutes' overlap).
-  const since = state.cursorAt ? Math.min(MAX_LOOKBACK_MINUTES, (startedAt - state.cursorAt) / 60000 + 3) : 30;
+  const since = state.cursorAt ? Math.min(MAX_LOOKBACK_MINUTES, (startedAt - state.cursorAt) / 60000 + 3) : QUIET_MINUTES + 20;
   const jql = changedJql(config.organizations, since);
   let token = '';
   let complete = true;
@@ -119,7 +122,7 @@ export async function runOnce({ jira = appJira(), store = storage, summarise = s
   } while (token && clock() < deadline);
   if (token) complete = false;
   // The window ends QUIET_MINUTES ago; only move on once everything in it is done.
-  const cursorAt = complete ? startedAt - 10 * 60000 : state.cursorAt || startedAt - 40 * 60000;
+  const cursorAt = complete ? startedAt - QUIET_MINUTES * 60000 : state.cursorAt || startedAt - (QUIET_MINUTES + 30) * 60000;
 
   // 2. The backfill, with whatever time is left.
   let backfill = state.backfill;

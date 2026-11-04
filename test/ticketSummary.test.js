@@ -51,8 +51,8 @@ test('settings: off by default, known organisations and fields only', () => {
   assert.equal(all.ticketSummary.fieldKind, 'textarea');
 });
 
-test('changed tickets are found per organisation, quiet for 10 minutes', () => {
-  assert.equal(changedJql([ORG], 7.2), 'organizations = "Ryanair Crew" AND updated >= -8m AND updated <= -10m ORDER BY updated ASC');
+test('changed tickets are found per organisation, quiet for 20 minutes', () => {
+  assert.equal(changedJql([ORG], 27.2), 'organizations = "Ryanair Crew" AND updated >= -28m AND updated <= -20m ORDER BY updated ASC');
   assert.match(changedJql([ORG, { id: '2', name: 'Say "hi"' }], 5), /organizations in \("Ryanair Crew", "Say \\"hi\\""\)/);
 });
 
@@ -152,7 +152,7 @@ test('job: summarises changed tickets, moves the cursor, works through the backf
   assert.match(jira.calls.search[0].jql, /updated >= -8m/);
   assert.deepEqual(jira.calls.writes.map((w) => w.key), ['SD-1', 'SD-2', 'SD-3']);
   assert.equal(last.summarised, 3);
-  assert.equal(store.state.cursorAt, NOW - 10 * 60000);
+  assert.equal(store.state.cursorAt, NOW - 20 * 60000);
   assert.equal(store.state.backfill.running, false);
   assert.equal(store.state.backfill.summarised, 2);
   assert.equal(store.state.totalSummarised, 3);
