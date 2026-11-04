@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.36.1 (2026-11-04)
+
+- **Lower AI cost for ticket summaries** (Forge LLM charges were forecast at about $86 for November, almost all from ticket summaries on Sonnet):
+  - Summaries use Claude Haiku 4.5, a third of Sonnet's price per token, with Sonnet as the fallback. Report and weekly AI are unchanged.
+  - Quoted earlier emails ("On … wrote:", Original/Forwarded Message, From: blocks, > lines), mobile footers and disclaimers are left out of comments, so a reply no longer re-sends the whole thread. A description keeps a forwarded email whole unless real text stands above it.
+  - Tighter bounds: description 3,000 characters (was 6,000), the last 12 public comments (was 20) of up to 800 characters (was 1,500).
+  - A ticket is summarised after 20 quiet minutes (was 10), so an email back-and-forth gives one summary instead of several. The job's window now follows that setting (it was fixed at 10 minutes).
+  - The run log shows "chars": what was sent to the AI, to keep an eye on cost.
+
 ## 1.36.0 (2026-11-03)
 
 - **Weekly SD report: AI drafts the progress notes too.** Completed this week, In progress and Next steps (up to 5 lines each) are written with the insights and actions when a week is built. Completed uses last week's actions now marked Done and results the figures show (backlog down, % resolved up), never work that isn't in the data; In progress uses actions still open and last week's next steps not yet done; Next steps comes from the open and suggested actions. Like the insights, they fill the boxes until agents save their own notes; after that, Use AI suggestions loads them. Agents review before publishing. Same setting (Settings → Weekly report), now "Write insights, suggest actions and draft the progress notes with AI".

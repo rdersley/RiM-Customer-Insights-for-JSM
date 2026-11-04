@@ -2,6 +2,10 @@
 // Claude through Forge LLMs like the report summary in ai.js.
 import { MODELS, callTool } from './ai.js';
 
+// Ticket summaries are short and frequent, so they use Haiku (a third of
+// Sonnet's Forge LLM price per token), falling back to Sonnet if it's unavailable.
+export const SUMMARY_MODELS = ['claude-haiku-4-5-20251001', ...MODELS];
+
 const forgeChat = async (prompt) => (await import('@forge/llm')).chat(prompt);
 const MAX_SUMMARY = 700;
 const clip = (value, length) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, length);
@@ -34,7 +38,7 @@ export function parseSummary(raw) {
   return text.length >= 10 ? text : '';
 }
 
-export async function summariseTicket(input, { chatFn = forgeChat, models = MODELS } = {}) {
+export async function summariseTicket(input, { chatFn = forgeChat, models = SUMMARY_MODELS } = {}) {
   const { raw, model } = await callTool(chatFn, models, [
     { role: 'system', content: SYSTEM },
     { role: 'user', content: `Ticket as JSON:\n${JSON.stringify(input)}` },

@@ -10,11 +10,12 @@ export const MAX_SUMMARY_ORGS = 10;
 export const SUMMARY_PROPERTY = 'retailinmotion.ticketSummary';
 // A ticket is summarised once it has been quiet this long, so a burst of
 // comments gives one summary.
-export const QUIET_MINUTES = 10;
+export const QUIET_MINUTES = 20;
 export const BACKFILL_LIMITS = { min: 1, max: 180, default: 30 };
-const MAX_DESCRIPTION = 6000;
-const MAX_COMMENTS = 20;
-const MAX_COMMENT = 1500;
+// Bounds on what's sent to the model (cost is per token).
+const MAX_DESCRIPTION = 3000;
+const MAX_COMMENTS = 12;
+const MAX_COMMENT = 800;
 // Jira single-line text fields hold 255 characters.
 const SHORT_TEXT = 255;
 
@@ -100,6 +101,36 @@ function adfText(node) {
   return ['paragraph', 'heading', 'listItem', 'codeBlock', 'blockquote'].includes(node.type) ? `${inner}\n` : inner;
 }
 
+// Where an email's own text ends: the quoted earlier thread, a mobile footer or a disclaimer.
+const QUOTE_START = [
+  /^On .{6,200} wrote:\s*$/i,
+  /^-{2,}\s*(Original|Forwarded) Message\s*-{2,}/i,
+  /^From:\s.+/i,
+  /^Sent from my /i,
+  /^Get Outlook for /i,
+  /^(This (e-?mail|message)|The information (contained )?in this (e-?mail|message)|CONFIDENTIALITY NOTICE|DISCLAIMER)/i,
+  /^_{8,}\s*$/,
+];
+
+/**
+ * An email reply without the earlier thread quoted under it, footers and
+ * disclaimers, so each comment sends only what's new. When less than
+ * `minKeep` characters would remain (a forwarded email whose text is all
+ * below "From:"), the text is kept whole.
+ */
+export function withoutQuoted(text, minKeep = 1) {
+  const lines = String(text ?? '').split('\n');
+  const out = [];
+  for (const line of lines) {
+    const t = line.trim();
+    if (QUOTE_START.some((re) => re.test(t))) break;
+    if (t.startsWith('>')) continue;
+    out.push(line);
+  }
+  const kept = out.join('\n').trim();
+  return kept.length >= minKeep ? kept : String(text ?? '').trim();
+}
+
 export const plainText = (value) => (value && typeof value === 'object' ? adfText(value) : String(value ?? ''))
   .replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim();
 
@@ -110,7 +141,7 @@ export const plainText = (value) => (value && typeof value === 'object' ? adfTex
 export function summaryInput(issue, publicComments = []) {
   const f = issue?.fields || {};
   const comments = publicComments
-    .map((c) => ({ created: String(c?.created?.iso8601 || c?.created || '').slice(0, 10), text: clip(plainText(c?.body), MAX_COMMENT) }))
+    .map((c) => ({ created: String(c?.created?.iso8601 || c?.created || '').slice(0, 10), text: clip(withoutQuoted(plainText(c?.body)), MAX_COMMENT) }))
     .filter((c) => c.text)
     .slice(-MAX_COMMENTS);
   return {
@@ -118,7 +149,8 @@ export function summaryInput(issue, publicComments = []) {
     requestType: clip(f.customfield_10010?.requestType?.name, 120),
     status: clip(f.status?.name, 60),
     created: String(f.created || '').slice(0, 10),
-    description: plainText(f.description).slice(0, MAX_DESCRIPTION),
+    // A description is often a forwarded email: keep it whole unless real text stands above the quote.
+    description: withoutQuoted(plainText(f.description), 120).slice(0, MAX_DESCRIPTION),
     comments,
   };
 }
