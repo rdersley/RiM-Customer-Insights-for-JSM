@@ -2,13 +2,14 @@
 // the last 12 weeks. Weeks are built by a background job on Monday; agents can
 // rebuild a week, review the insights and actions the build wrote (AI
 // suggestions and last week's open actions), write the progress, download it
-// as Excel, and (Jira admins and project admins) publish it to the portal.
+// as Excel or PDF, and (Jira admins and project admins) publish it to the portal.
 import React, { useEffect, useState } from 'react';
 import { invoke } from '@forge/bridge';
 import { Button, Card, EmptyState, Field, Loading, Lozenge, Notice } from '@retailinmotion/ui/react';
 import { ACTION_STATUSES, EMPTY_NOTES, NOTE_LIMITS, weekLabel, weekOf } from '../../../src/weekly.js';
 import WeeklyReportView from './WeeklyReportView.jsx';
 import { downloadWeeklyExcel } from './exportExcel.js';
+import { downloadWeeklyPdf } from './exportWeeklyPdf.js';
 
 const when = (iso) => new Date(iso).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 const addWeeks = (iso, n) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 7 * 86400000).toISOString().slice(0, 10);
@@ -50,6 +51,7 @@ export default function WeeklyTab() {
   const [loading, setLoading] = useState(false);
   const [notes, setNotes] = useState(null);
   const [busy, setBusy] = useState('');
+  const [pdfBusy, setPdfBusy] = useState(false);
   const [message, setMessage] = useState(null);
 
   const loadList = () => invoke('getWeeklyReports').then((result) => {
@@ -119,6 +121,15 @@ export default function WeeklyTab() {
       </Field>
       <div className="nq-inline">
         {record?.builtAt && <Button onClick={() => downloadWeeklyExcel({ ...record, notes })}>Download Excel</Button>}
+        {record?.builtAt && <Button disabled={pdfBusy} onClick={async () => {
+          setPdfBusy(true);
+          try {
+            // Logos are optional: the company's, and the customer's when the report covers one organisation.
+            const orgs = record.organizations || [];
+            const logos = await invoke('getPdfLogos', { orgId: orgs.length === 1 ? orgs[0].id : null }).catch(() => null);
+            await downloadWeeklyPdf({ ...record, notes }, { logos });
+          } finally { setPdfBusy(false); }
+        }}>{pdfBusy ? 'Creating PDF…' : 'Download PDF'}</Button>}
         <Button appearance="subtle" disabled={Boolean(busy) || pending} onClick={rebuild}>{record?.builtAt ? 'Rebuild' : 'Build now'}</Button>
         {pending && <Button appearance="subtle" onClick={() => { loadList(); loadWeek(); }}>Check again</Button>}
       </div>

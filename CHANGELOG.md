@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.37.0 (2026-11-06)
+
+- **Weekly SD report as PDF:** Download PDF next to Download Excel in the Weekly report tab and on the portal's Weekly SD report. A4, in the report PDF's style: key metric boxes and the table per organisation, top issues by category (and subcategory), workload to resolve tickets, insights, the action register and progress (completed, in progress, next steps), with page numbers. The company logo is added (and the customer's when the report covers one organisation, or on the portal the viewer's organisation). Built in the browser like the Excel file; the agent page uses the notes as currently edited.
+
 ## 1.36.1 (2026-11-04)
 
 - **Lower AI cost for ticket summaries** (Forge LLM charges were forecast at about $86 for November, almost all from ticket summaries on Sonnet):
