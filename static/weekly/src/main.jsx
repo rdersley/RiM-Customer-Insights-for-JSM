@@ -1,6 +1,6 @@
 // Customer portal: the Weekly SD report weeks agents published for the
 // viewer's organisation(s) (src/portal.js myWeeklyReports), with an Excel
-// download built in the browser.
+// or PDF download built in the browser.
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { invoke, view } from '@forge/bridge';
@@ -10,6 +10,7 @@ import { Button, EmptyState, Field, Loading, Notice } from '@retailinmotion/ui/r
 import { weekLabel } from '../../../src/weekly.js';
 import WeeklyReportView from '../../app/src/WeeklyReportView.jsx';
 import { downloadWeeklyExcel } from '../../app/src/exportExcel.js';
+import { downloadWeeklyPdf } from '../../app/src/exportWeeklyPdf.js';
 import './styles.css';
 
 enableTheme(view);
@@ -17,6 +18,19 @@ enableTheme(view);
 function Report({ report }) {
   const [from, setFrom] = useState(report.weeks[0].from);
   const record = report.weeks.find((w) => w.week.from === from) || report.weeks[0];
+  const [pdfBusy, setPdfBusy] = useState(false);
+  async function pdf() {
+    setPdfBusy(true);
+    try {
+      // Logos are optional: the first of the report's organisations the viewer belongs to.
+      let logos = null;
+      for (const o of record.organizations || []) {
+        logos = await invoke('reportLogos', { orgId: o.id }).catch(() => null);
+        if (logos) break;
+      }
+      await downloadWeeklyPdf(record, { logos });
+    } finally { setPdfBusy(false); }
+  }
   return <section className="nq-stack">
     <div className="nq-spread wp-title">
       <h2>{report.name}</h2>
@@ -27,6 +41,7 @@ function Report({ report }) {
           </select>
         </Field>}
         <Button appearance="primary" onClick={() => downloadWeeklyExcel(record)}>Download Excel</Button>
+        <Button onClick={pdf} disabled={pdfBusy}>{pdfBusy ? 'Preparing…' : 'Download PDF'}</Button>
       </div>
     </div>
     <WeeklyReportView record={record} />
