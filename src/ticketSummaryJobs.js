@@ -4,7 +4,7 @@
 // existing tickets" backfill. Reads and writes Jira as the app.
 import { asApp, route } from '@forge/api';
 import { pool, readJson, requestWithRetry } from './engine.js';
-import { QUIET_MINUTES, SUMMARY_PROPERTY, backfillJql, changedJql, fieldValue, hasContent, hash, ready, sourceFingerprint, summaryInput } from './ticketSummary.js';
+import { QUIET_MINUTES, SUMMARY_PROPERTY, backfillJql, changedJql, refreshHoursOf, shouldDefer, fieldValue, hasContent, hash, ready, sourceFingerprint, summaryInput } from './ticketSummary.js';
 import { summariseTicket } from './ticketSummaryAi.js';
 import * as storage from './storage.js';
 
@@ -57,13 +57,15 @@ export function appJira() {
 
 /**
  * Summarises one ticket if its customer-visible text changed since the last
- * summary. Returns 'summarised', 'unchanged' or 'empty'.
+ * summary. Returns 'summarised', 'unchanged', 'empty' or 'deferred' (an open ticket
+ * summarised less than refreshHours ago: the catch-up window picks it up later).
  */
 export async function summariseIssue(issue, config, deps) {
   const { jira, summarise = summariseTicket, now = () => new Date() } = deps;
   const marker = issue.properties?.[SUMMARY_PROPERTY] || {};
   const source = sourceFingerprint(issue.fields);
   if (marker.source === source) return 'unchanged';
+  if (shouldDefer(issue, marker, refreshHoursOf(config), now().getTime())) return 'deferred';
   const input = summaryInput(issue, await jira.publicComments(issue.key));
   const inputHash = hash(JSON.stringify(input));
   const sentChars = JSON.stringify(input).length;
@@ -107,7 +109,7 @@ export async function runOnce({ jira = appJira(), store = storage, summarise = s
   const startedAt = clock();
   const deadline = startedAt + budgetMs;
   const state = await store.loadTicketSummaryState();
-  const tally = { summarised: 0, unchanged: 0, empty: 0, failed: 0, chars: 0, lastError: state.last?.lastError || '' };
+  const tally = { summarised: 0, unchanged: 0, empty: 0, deferred: 0, failed: 0, chars: 0, lastError: state.last?.lastError || '' };
   const deps = { jira, summarise, onSent: (n) => { tally.chars += n; } };
 
   // 1. Tickets changed since the last run (with a few minutes' overlap).
@@ -121,13 +123,26 @@ export async function runOnce({ jira = appJira(), store = storage, summarise = s
     token = page.nextPageToken;
   } while (token && clock() < deadline);
   if (token) complete = false;
+  // 1b. Catch-up: the same window refreshHours earlier, for open tickets deferred then.
+  // Each is summarised once with everything that changed since.
+  const refreshHours = refreshHoursOf(config);
+  if (refreshHours && complete && clock() < deadline) {
+    const catchup = changedJql(config.organizations, since, refreshHours * 60);
+    token = '';
+    do {
+      const page = await jira.search(catchup, config.fieldId, token);
+      if (!(await processPage(page.issues, config, deps, tally, deadline, clock))) { complete = false; break; }
+      token = page.nextPageToken;
+    } while (token && clock() < deadline);
+    if (token) complete = false;
+  }
   // The window ends QUIET_MINUTES ago; only move on once everything in it is done.
   const cursorAt = complete ? startedAt - QUIET_MINUTES * 60000 : state.cursorAt || startedAt - (QUIET_MINUTES + 30) * 60000;
 
   // 2. The backfill, with whatever time is left.
   let backfill = state.backfill;
   if (backfill?.running && clock() < deadline - 20000) {
-    const counts = { summarised: 0, unchanged: 0, empty: 0, failed: 0 };
+    const counts = { summarised: 0, unchanged: 0, empty: 0, deferred: 0, failed: 0 };
     let next = backfill.nextPageToken || '';
     let finished = false;
     while (clock() < deadline - 20000) {
@@ -144,7 +159,7 @@ export async function runOnce({ jira = appJira(), store = storage, summarise = s
       nextPageToken: finished ? '' : next,
       running: !finished,
       finishedAt: finished ? new Date(clock()).toISOString() : null,
-      checked: (backfill.checked || 0) + counts.summarised + counts.unchanged + counts.empty + counts.failed,
+      checked: (backfill.checked || 0) + counts.summarised + counts.unchanged + counts.empty + counts.deferred + counts.failed,
       summarised: (backfill.summarised || 0) + counts.summarised,
       failed: (backfill.failed || 0) + counts.failed,
     };

@@ -147,7 +147,7 @@ test('job: summarises changed tickets, moves the cursor, works through the backf
     'updated >= -': [{ issues: [issue('SD-1')] }],
     'created >= -30d': [{ issues: [issue('SD-2')] }, { issues: [issue('SD-3')] }],
   } });
-  const store = fakeStore({ ticketSummary: config }, { cursorAt: NOW - 5 * 60000, backfill: { running: true, days: 30, nextPageToken: '', checked: 0, summarised: 0, failed: 0 } });
+  const store = fakeStore({ ticketSummary: { ...config, refreshHours: 0 } }, { cursorAt: NOW - 5 * 60000, backfill: { running: true, days: 30, nextPageToken: '', checked: 0, summarised: 0, failed: 0 } });
   const last = await runOnce({ jira, store, summarise: fakeSummarise(), clock: () => NOW });
   assert.match(jira.calls.search[0].jql, /updated >= -8m/);
   assert.deepEqual(jira.calls.writes.map((w) => w.key), ['SD-1', 'SD-2', 'SD-3']);
@@ -162,7 +162,7 @@ test('job: a failing ticket is counted and the rest carry on', async () => {
   const NOW = Date.parse('2026-10-20T12:00:00Z');
   const jira = fakeJira({ pages: { 'updated >= -': [{ issues: [issue('SD-1'), issue('SD-2')] }] } });
   const summarise = async (input) => { if (input.title && jira.calls.writes.length === 0 && !summarise.failed) { summarise.failed = true; throw new Error('AI request failed: busy'); } return { summary: 'A clear enough summary.', model: 'm' }; };
-  const store = fakeStore({ ticketSummary: config });
+  const store = fakeStore({ ticketSummary: { ...config, refreshHours: 0 } });
   const last = await runOnce({ jira, store, summarise, clock: () => NOW });
   assert.equal(last.failed, 1);
   assert.equal(last.summarised, 1);

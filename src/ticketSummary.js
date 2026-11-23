@@ -19,7 +19,10 @@ const MAX_COMMENT = 800;
 // Jira single-line text fields hold 255 characters.
 const SHORT_TEXT = 255;
 
-export const DEFAULT_TICKET_SUMMARY = { enabled: false, organizations: [], fieldId: '', backfillDays: BACKFILL_LIMITS.default };
+// An open ticket is summarised again at most this often (hours; 0 = after every change). Resolved tickets
+// are summarised straight away. Busy email threads otherwise cost one AI call per reply.
+export const REFRESH_LIMITS = { min: 0, max: 24, default: 4 };
+export const DEFAULT_TICKET_SUMMARY = { enabled: false, organizations: [], fieldId: '', backfillDays: BACKFILL_LIMITS.default, refreshHours: REFRESH_LIMITS.default };
 
 const clip = (value, length) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, length);
 const escapeJql = (value) => String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
@@ -43,12 +46,14 @@ export function sanitizeTicketSummary(input, organizations = [], fieldChoices = 
     .map(({ id, name }) => ({ id: String(id), name: String(name) }));
   const field = fieldChoices.find((f) => f.id === String(input?.fieldId ?? ''));
   const days = Number(input?.backfillDays);
+  const refresh = input?.refreshHours === undefined ? REFRESH_LIMITS.default : Number(input.refreshHours);
   return {
     enabled: input?.enabled === true,
     organizations: watched,
     fieldId: field ? field.id : '',
     fieldKind: field ? field.kind : '',
     backfillDays: Number.isInteger(days) && days >= BACKFILL_LIMITS.min && days <= BACKFILL_LIMITS.max ? days : BACKFILL_LIMITS.default,
+    refreshHours: Number.isInteger(refresh) && refresh >= REFRESH_LIMITS.min && refresh <= REFRESH_LIMITS.max ? refresh : REFRESH_LIMITS.default,
   };
 }
 
@@ -60,9 +65,22 @@ export function organizationClause(organizations) {
     : `organizations in (${organizations.map((o) => `"${escapeJql(o.name)}"`).join(', ')})`;
 }
 
-/** Tickets changed since `sinceMinutes` ago and quiet for QUIET_MINUTES, oldest change first. */
-export function changedJql(organizations, sinceMinutes) {
-  return `${organizationClause(organizations)} AND updated >= -${Math.ceil(sinceMinutes)}m AND updated <= -${QUIET_MINUTES}m ORDER BY updated ASC`;
+/**
+ * Tickets changed since `sinceMinutes` ago and quiet for QUIET_MINUTES, oldest change first.
+ * `offsetMinutes` shifts the window back (the catch-up for open tickets deferred `refreshHours` ago).
+ */
+export function changedJql(organizations, sinceMinutes, offsetMinutes = 0) {
+  return `${organizationClause(organizations)} AND updated >= -${Math.ceil(sinceMinutes + offsetMinutes)}m AND updated <= -${QUIET_MINUTES + offsetMinutes}m ORDER BY updated ASC`;
+}
+
+/** The refresh interval in hours; settings saved before it existed use the default. */
+export const refreshHoursOf = (config) => (config?.refreshHours === undefined || config?.refreshHours === null ? REFRESH_LIMITS.default : Number(config.refreshHours) || 0);
+
+/** An open ticket summarised less than `refreshHours` ago waits for the catch-up; resolved ones don't. */
+export function shouldDefer(issue, marker, refreshHours, now = Date.now()) {
+  if (!refreshHours || !marker?.at) return false;
+  if (issue?.fields?.status?.statusCategory?.key === 'done') return false;
+  return now - Date.parse(marker.at) < refreshHours * 3600000;
 }
 
 export function backfillJql(organizations, days) {
