@@ -110,7 +110,7 @@ export async function runOnce({ jira = appJira(), store = storage, summarise = s
   const deadline = startedAt + budgetMs;
   const state = await store.loadTicketSummaryState();
   const tally = { summarised: 0, unchanged: 0, empty: 0, deferred: 0, failed: 0, chars: 0, lastError: state.last?.lastError || '' };
-  const deps = { jira, summarise, onSent: (n) => { tally.chars += n; } };
+  const deps = { jira, summarise, now: () => new Date(clock()), onSent: (n) => { tally.chars += n; } };
 
   // 1. Tickets changed since the last run (with a few minutes' overlap).
   const since = state.cursorAt ? Math.min(MAX_LOOKBACK_MINUTES, (startedAt - state.cursorAt) / 60000 + 3) : QUIET_MINUTES + 20;
