@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.38.0 (2026-11-23)
+
+- **AI ticket summaries: open tickets refreshed at most every 4 hours.** Since 1.36.1 all remaining AI cost was ticket summaries on Haiku (about $0.85 a day), mostly busy email threads summarised again after every reply. Now a new ticket is still summarised after 20 quiet minutes and a resolved one straight away, but an open ticket summarised less than 4 hours ago is deferred; a catch-up window 4 hours later summarises it once with everything that changed. Deferred tickets are skipped before their comments are read. Setting: Settings → Customers → AI ticket summaries → "Update open tickets' summaries at most every (hours)", 0–24, default 4 (also for settings saved before; 0 = every change). Run logs count "deferred".
+
 ## 1.37.0 (2026-11-06)
 
 - **Weekly SD report as PDF:** Download PDF next to Download Excel in the Weekly report tab and on the portal's Weekly SD report. A4, in the report PDF's style: key metric boxes and the table per organisation, top issues by category (and subcategory), workload to resolve tickets, insights, the action register and progress (completed, in progress, next steps), with page numbers. The company logo is added (and the customer's when the report covers one organisation, or on the portal the viewer's organisation). Built in the browser like the Excel file; the agent page uses the notes as currently edited.

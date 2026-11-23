@@ -1,7 +1,7 @@
 // Settings → AI ticket summaries (src/ticketSummary.js). Off until an admin turns it on.
 import React, { useEffect, useState } from 'react';
 import { Button, Card, Field } from '@retailinmotion/ui/react';
-import { BACKFILL_LIMITS, DEFAULT_TICKET_SUMMARY, MAX_SUMMARY_ORGS, QUIET_MINUTES } from '../../../src/ticketSummary.js';
+import { BACKFILL_LIMITS, DEFAULT_TICKET_SUMMARY, MAX_SUMMARY_ORGS, QUIET_MINUTES, REFRESH_LIMITS } from '../../../src/ticketSummary.js';
 
 const when = (iso) => (iso ? new Date(iso).toLocaleString() : '');
 
@@ -71,6 +71,11 @@ export default function TicketSummarySettings({ value, onChange, organizations =
         </Field>
         <p className="nq-muted">Only the ticket's title, request type, status, description and the comments shared with the customer are sent, never internal comments. Summaries use Atlassian-hosted AI, so ticket text stays on the Atlassian platform. The app edits the field without notifying anyone.</p>
         <div className="cs-row cs-row--pair">
+          <Field label="Update open tickets' summaries at most every (hours)" htmlFor="cs-summary-refresh"
+            help={`A new ticket is summarised after ${QUIET_MINUTES} quiet minutes and a resolved one straight away. An open ticket that keeps changing is summarised again at most this often, with everything that changed. 0 = after every change (costs more AI).`}>
+            <input id="cs-summary-refresh" className="nq-input cs-number" type="number" min={REFRESH_LIMITS.min} max={REFRESH_LIMITS.max} step={1}
+              value={config.refreshHours ?? REFRESH_LIMITS.default} onChange={(e) => set({ refreshHours: Number(e.target.value) })} />
+          </Field>
           <Field label="Summarise existing tickets from the last (days)" htmlFor="cs-summary-days" help={`Between ${BACKFILL_LIMITS.min} and ${BACKFILL_LIMITS.max}. Tickets already summarised and unchanged are skipped.`}>
             <input id="cs-summary-days" className="nq-input cs-number" type="number" min={BACKFILL_LIMITS.min} max={BACKFILL_LIMITS.max} step={1}
               value={config.backfillDays} onChange={(e) => set({ backfillDays: Number(e.target.value) })} />
