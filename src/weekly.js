@@ -381,3 +381,28 @@ export function categoryTables(tickets, week) {
     created: categoryTree(tickets.filter((t) => inWeek(t.created, week)), tickets.filter((t) => inWeek(t.created, before))),
   };
 }
+
+/**
+ * The week-by-week comparison table (page, PDF and Excel): one row per figure
+ * over the three weeks in record.excel.backlog. `kind`: count | percent |
+ * decimal | change; `tone` per value for week-on-week changes: 'good' | 'bad'
+ * (more created is bad, more resolved is good).
+ */
+export function comparisonRows(backlog) {
+  if (!Array.isArray(backlog) || !backlog.length) return [];
+  const row = (label, read, kind = 'count', extra = {}) => ({ label, kind, values: backlog.map(read), ...extra });
+  const toned = (values, higherIsBetter) => values.map((v) => (v === null || v === undefined || v === 0 ? null : (v > 0) === higherIsBetter ? 'good' : 'bad'));
+  const created = backlog.map((w) => w.createdChange);
+  const resolved = backlog.map((w) => w.resolvedChange);
+  return [
+    row('Total Open Tickets', (w) => w.open, 'count', { bold: true }),
+    row('Created Tickets', (w) => w.created, 'count', { bold: true }),
+    ...(backlog[0].createdByOrg || []).map((o, i) => row(`Created – ${o.name}`, (w) => w.createdByOrg?.[i]?.count ?? null)),
+    ...(backlog[0].createdByFocus || []).map((f, i) => row(`Created ${f.label} Tickets`, (w) => w.createdByFocus?.[i]?.count ?? null)),
+    row('Total Resolved Tickets', (w) => w.resolved, 'count', { bold: true }),
+    row('% tickets resolved', (w) => w.resolvedPct, 'percent'),
+    row('Average open ticket age (days)', (w) => w.avgOpenAgeDays, 'decimal'),
+    { label: 'Created WoW %', kind: 'change', values: created, tones: toned(created, false) },
+    { label: 'Resolved WoW %', kind: 'change', values: resolved, tones: toned(resolved, true) },
+  ];
+}

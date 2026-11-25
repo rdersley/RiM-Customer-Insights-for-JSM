@@ -11,6 +11,8 @@ const MUTED = [98, 111, 134];
 const BRAND = [12, 102, 228];
 const RULE = [220, 223, 228];
 const FILL = [244, 245, 247];
+// Week-on-week changes: better / worse.
+const TONES = { good: [34, 139, 34], bad: [200, 35, 51] };
 
 const W = 210;
 const H = 297;
@@ -75,7 +77,7 @@ export function buildWeeklyPdf(JsPdf, c, { product = 'Customer Insights', logos 
       const rh = Math.max(...lines.map((l) => l.length)) * lh(size) + 1.2;
       room(rh);
       font(size, row.bold ? 'bold' : 'normal'); // a page break redraws the header in its own font
-      lines.forEach((ls, i) => ls.forEach((l, k) => doc.text(l, cols[i].align === 'right' ? cols[i].x + cols[i].w - 1 : cols[i].x, y + lh(size) * (k + 0.78), { align: cols[i].align === 'right' ? 'right' : 'left' })));
+      lines.forEach((ls, i) => ls.forEach((l, k) => (font(size, row.bold || row.tones?.[i] ? 'bold' : 'normal', TONES[row.tones?.[i]] || INK), doc.text(l, cols[i].align === 'right' ? cols[i].x + cols[i].w - 1 : cols[i].x, y + lh(size) * (k + 0.78), { align: cols[i].align === 'right' ? 'right' : 'left' }))));
       y += rh;
       doc.setDrawColor(...RULE); doc.setLineWidth(0.15); doc.line(M, y, W - M, y); y += 0.8;
     }

@@ -3,7 +3,7 @@
 // metrics, top issues, insights, action register, then progress.
 import React from 'react';
 import { Card, EmptyState, Kpi, Lozenge, Notice } from '@retailinmotion/ui/react';
-import { changeText, noteLines, weekLabel } from '../../../src/weekly.js';
+import { changeText, comparisonRows, noteLines, shortWeek, weekLabel } from '../../../src/weekly.js';
 import { minutesText } from '../../../src/agents.js';
 import './weekly.css';
 
@@ -39,6 +39,26 @@ function Activity({ activity }) {
       </table>
     </div>
     <p className="nq-muted">Open tickets are those without a resolution at the end of Sunday. % resolved = resolved in the week ÷ (open at the start of the week + created in it); the week before it was {pct(a.previous.resolvedPct)} ({n(a.previous.resolved)} of {n(a.previous.openStart + a.previous.created)}).</p>
+  </>;
+}
+
+const dec = (value) => (value === null || value === undefined ? '–' : (Math.round(Number(value) * 10) / 10).toLocaleString());
+
+/** The last three weeks side by side (weeks built from 1.39.0, record.excel.backlog). */
+function Comparison({ backlog }) {
+  const rows = comparisonRows(backlog);
+  const cell = (r, v) => (r.kind === 'percent' ? pct(v) : r.kind === 'decimal' ? dec(v) : r.kind === 'change' ? changeText(v) : n(v));
+  return <>
+    <div className="nq-table-wrap">
+      <table className="nq-table wk-table wk-compare">
+        <thead><tr><th>Week</th>{backlog.map((w) => <th key={w.from} className="wk-num">{shortWeek(w)}</th>)}</tr></thead>
+        <tbody>{rows.map((r) => <tr key={r.label} className={r.bold ? 'wk-strong' : undefined}>
+          <td>{r.label}</td>
+          {r.values.map((v, i) => <td key={backlog[i].from} className={`wk-num${r.tones?.[i] ? ` wk-${r.tones[i]}` : ''}`}>{cell(r, v)}</td>)}
+        </tr>)}</tbody>
+      </table>
+    </div>
+    <p className="nq-muted">Open tickets are those open at the end of each week (Sunday midnight, Irish time); age is days from created to then. Week on week: green is better (fewer created, more resolved), red is worse.</p>
   </>;
 }
 
@@ -97,6 +117,10 @@ export default function WeeklyReportView({ record, hideNotes = false }) {
     <Card title="Key metrics">
       <Activity activity={record.activity} />
     </Card>
+
+    {record.excel?.backlog?.length > 0 && <Card title="Backlog and ticket activity" description="The last three weeks side by side.">
+      <Comparison backlog={record.excel.backlog} />
+    </Card>}
 
     <Card title="Top issues" description={`Tickets created last week${record.fields.category ? ` by ${record.fields.category}` : ''}.`}>
       {!record.categories ? <Notice>No category field is set for this report yet.</Notice>

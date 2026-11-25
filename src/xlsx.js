@@ -6,13 +6,16 @@
 // workbook([{ name, columns: [width…], rows: [[cell…]…], freeze, autoFilter, merges }]) → Uint8Array
 // A cell is a string, a number, null (empty), or { v, style } with style
 // 'bold' | 'title' | 'percent' | 'decimal' | 'wrap' | 'header' | 'datetime' |
-// 'date' | 'boldPercent' | 'top' (top-aligned, beside wrapped text).
+// 'date' | 'boldPercent' | 'top' (top-aligned, beside wrapped text), and for a
+// boxed table: 'boxLabel' | 'boxLabelBold' (shaded) | 'boxHeader' | 'box' |
+// 'boxBold' | 'boxDecimal' | 'boxPercent' | 'boxGood' (green) | 'boxBad' (red).
 // Percentages are given as numbers out of 100
 // (42.5 → 42.5%); dates as Excel date numbers. `freeze`: rows kept in view at
 // the top; `autoFilter`: a range such as 'A1:Z40'; `merges`: ranges such as 'A1:H1'.
 
-const STYLES = { bold: 1, title: 2, percent: 3, decimal: 4, wrap: 5, header: 6, datetime: 7, date: 8, boldPercent: 9, top: 10 };
-const PERCENT = new Set(['percent', 'boldPercent']);
+const STYLES = { bold: 1, title: 2, percent: 3, decimal: 4, wrap: 5, header: 6, datetime: 7, date: 8, boldPercent: 9, top: 10,
+  boxLabel: 11, boxLabelBold: 12, boxHeader: 13, box: 14, boxBold: 15, boxDecimal: 16, boxPercent: 17, boxGood: 18, boxBad: 19 };
+const PERCENT = new Set(['percent', 'boldPercent', 'boxPercent', 'boxGood', 'boxBad']);
 const encoder = new TextEncoder();
 
 const escapeXml = (s) => String(s)
@@ -57,11 +60,14 @@ function sheetXml({ columns = [], rows = [], freeze = 0, autoFilter = '', merges
 const STYLES_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
   + '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
   + '<numFmts count="4"><numFmt numFmtId="164" formatCode="0.0%"/><numFmt numFmtId="165" formatCode="0.0"/><numFmt numFmtId="166" formatCode="dd/mm/yyyy hh:mm"/><numFmt numFmtId="167" formatCode="dd/mm/yyyy"/></numFmts>'
-  + '<fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="14"/><name val="Calibri"/></font></fonts>'
-  + '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFD9E1F2"/><bgColor indexed="64"/></patternFill></fill></fills>'
-  + '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left/><right/><top/><bottom style="thin"><color rgb="FF8EA9DB"/></bottom><diagonal/></border></borders>'
+  + '<fonts count="5"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="14"/><name val="Calibri"/></font>'
+  + '<font><sz val="11"/><color rgb="FF00B050"/><name val="Calibri"/></font><font><sz val="11"/><color rgb="FFFF0000"/><name val="Calibri"/></font></fonts>'
+  + '<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFD9E1F2"/><bgColor indexed="64"/></patternFill></fill>'
+  + '<fill><patternFill patternType="solid"><fgColor rgb="FFDCE6F1"/><bgColor indexed="64"/></patternFill></fill></fills>'
+  + '<borders count="3"><border><left/><right/><top/><bottom/><diagonal/></border><border><left/><right/><top/><bottom style="thin"><color rgb="FF8EA9DB"/></bottom><diagonal/></border>'
+  + '<border><left style="thin"><color auto="1"/></left><right style="thin"><color auto="1"/></right><top style="thin"><color auto="1"/></top><bottom style="thin"><color auto="1"/></bottom><diagonal/></border></borders>'
   + '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
-  + '<cellXfs count="11">'
+  + '<cellXfs count="20">'
   + '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
   + '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>'
   + '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>'
@@ -73,6 +79,16 @@ const STYLES_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
   + '<xf numFmtId="167" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>'
   + '<xf numFmtId="164" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/>'
   + '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="top"/></xf>'
+  // Boxed table (thin border all round): label (shaded), header, values, green/red changes.
+  + '<xf numFmtId="0" fontId="0" fillId="3" borderId="2" xfId="0" applyFill="1" applyBorder="1"/>'
+  + '<xf numFmtId="0" fontId="1" fillId="3" borderId="2" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>'
+  + '<xf numFmtId="0" fontId="1" fillId="0" borderId="2" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center"/></xf>'
+  + '<xf numFmtId="0" fontId="0" fillId="0" borderId="2" xfId="0" applyBorder="1"/>'
+  + '<xf numFmtId="0" fontId="1" fillId="0" borderId="2" xfId="0" applyFont="1" applyBorder="1"/>'
+  + '<xf numFmtId="165" fontId="0" fillId="0" borderId="2" xfId="0" applyNumberFormat="1" applyBorder="1"/>'
+  + '<xf numFmtId="164" fontId="0" fillId="0" borderId="2" xfId="0" applyNumberFormat="1" applyBorder="1"/>'
+  + '<xf numFmtId="164" fontId="3" fillId="0" borderId="2" xfId="0" applyNumberFormat="1" applyFont="1" applyBorder="1"/>'
+  + '<xf numFmtId="164" fontId="4" fillId="0" borderId="2" xfId="0" applyNumberFormat="1" applyFont="1" applyBorder="1"/>'
   + '</cellXfs></styleSheet>';
 
 /** The workbook's parts: [path, xml]. */

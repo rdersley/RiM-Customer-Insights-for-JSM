@@ -15,3 +15,7 @@
 .wk-action-source { grid-column: 1 / -1; margin-top: -4px; }
 .wk-action-row { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto; gap: var(--nq-space-100); align-items: center; }
 @media (max-width: 640px) { .wk-action-row { grid-template-columns: 1fr 1fr; } }
+.wk-compare .wk-strong td { font-weight: 600; }
+.wk-compare td:first-child { background: var(--nq-surface-sunken); }
+.wk-compare .wk-good { color: var(--nq-text-success); font-weight: 600; }
+.wk-compare .wk-bad { color: var(--nq-text-danger); font-weight: 600; }
