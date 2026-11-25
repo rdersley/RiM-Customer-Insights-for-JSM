@@ -1,8 +1,11 @@
 // The Weekly SD report as an Excel workbook (src/xlsx.js), for agents and
-// portal customers alike: key metrics, top issues, workload, the action
-// register and progress. Built in the browser from the stored week.
-import { noteLines, weekLabel } from './weekly.js';
-import { workbook } from './xlsx.js';
+// portal customers alike. Weeks built with the Excel figures follow the
+// Ryanair weekly workbook (backlog over three weeks, tickets by category, top
+// issue trends, ticket lists); then workload, the action register and
+// progress. Built in the browser from the stored week and, for the ticket
+// lists, pages read from Jira (src/weeklyRows.js).
+import { noteLines, shortWeek, weekLabel } from './weekly.js';
+import { columnName, workbook } from './xlsx.js';
 
 const bold = (v) => ({ v, style: 'bold' });
 const title = (v) => ({ v, style: 'title' });
@@ -111,12 +114,178 @@ function progressSheet(record) {
   };
 }
 
-export function weeklySheets(record) {
-  return [metricsSheet(record), issuesSheet(record), workloadSheet(record), actionsSheet(record), progressSheet(record)];
+// ---- The Ryanair-style sheets (record.excel, from src/weeklyJobs.js) -------------
+
+const header = (v) => ({ v, style: 'header' });
+const boldPercent = (v) => (v === null || v === undefined ? null : { v, style: 'boldPercent' });
+const ddmm = (iso) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
+
+/** Backlog and ticket activity over the last three weeks, oldest first. */
+function backlogSheet(record) {
+  const weeks = record.excel.backlog;
+  const row = (label, read) => [label, ...weeks.map(read)];
+  const orgs = weeks[0]?.createdByOrg || [];
+  const focus = weeks[0]?.createdByFocus || [];
+  return {
+    name: 'Backlog and Ticket Activity',
+    columns: [40, ...weeks.map(() => 14)],
+    rows: [
+      [title('Backlog and Ticket Activity')],
+      [header(''), ...weeks.map((w) => header(shortWeek(w)))],
+      row(bold('Total Open Tickets'), (w) => w.open),
+      row(bold('Created Tickets'), (w) => w.created),
+      ...orgs.map((o, i) => row(`Created – ${o.name}`, (w) => w.createdByOrg[i]?.count ?? null)),
+      ...focus.map((f, i) => row(`Created ${f.label} Tickets`, (w) => w.createdByFocus[i]?.count ?? null)),
+      row(bold('Total Resolved Tickets'), (w) => w.resolved),
+      row('% tickets resolved', (w) => percent(w.resolvedPct)),
+      row('Average open ticket age (days)', (w) => decimal(w.avgOpenAgeDays)),
+      row('Created WoW %', (w) => percent(w.createdChange)),
+      row('Resolved WoW %', (w) => percent(w.resolvedChange)),
+      [],
+      ['Open tickets: open at the end of each week (Sunday midnight, Irish time). Age: days from created to the end of the week, averaged over those tickets.'],
+      ['% resolved = tickets resolved in the week ÷ (tickets open at the start of the week + tickets created in it).'],
+    ],
+  };
 }
 
-export function weeklyWorkbook(record) {
-  return workbook(weeklySheets(record));
+/** Columns side by side: each block is { width, rows }, with `gap` empty columns between. */
+function sideBySide(blocks, gap = 1) {
+  const height = Math.max(...blocks.map((b) => b.rows.length));
+  const rows = [];
+  for (let r = 0; r < height; r += 1) {
+    const row = [];
+    blocks.forEach((b, i) => {
+      const cells = b.rows[r] || [];
+      for (let c = 0; c < b.width; c += 1) row.push(cells[c] ?? null);
+      if (i < blocks.length - 1) for (let g = 0; g < gap; g += 1) row.push(null);
+    });
+    rows.push(row);
+  }
+  return rows;
+}
+
+/** Week-on-week change as a percentage; "New" when there were none the week before. */
+export const wowChange = (count, previous) => (previous > 0 ? Math.round(((count - previous) / previous) * 1000) / 10 : count > 0 ? 'New' : null);
+
+/** Category totals: name and count, with a grand total. */
+function totalsBlock(tree) {
+  return {
+    width: 2,
+    rows: [
+      [header('Category'), header('Tickets')],
+      ...tree.filter((c) => c.count).map((c) => [c.name, c.count]),
+      [bold('Grand Total'), bold(tree.reduce((n, c) => n + c.count, 0))],
+    ],
+  };
+}
+
+/** Categories with their subcategories, against last week (LW). */
+function detailBlock(tree) {
+  const line = (name, r, strong) => {
+    const change = wowChange(r.count, r.previous);
+    const pctCell = typeof change === 'number' ? (strong ? boldPercent : percent)(change) : change;
+    return [strong ? bold(name) : name, strong ? bold(r.count) : r.count, strong ? bold(r.previous) : r.previous, pctCell];
+  };
+  const total = { count: tree.reduce((n, c) => n + c.count, 0), previous: tree.reduce((n, c) => n + c.previous, 0) };
+  return {
+    width: 4,
+    rows: [
+      [header('Category / subcategory'), header('Tickets'), header('LW'), header('WoW Change %')],
+      ...tree.flatMap((c) => [line(c.name, c, true), ...c.children.map((s) => line(`    ${s.name}`, s, false))]),
+      line('Grand Total', total, true),
+    ],
+  };
+}
+
+function categorySheet(record) {
+  const field = record.fields.category || 'category';
+  const { open, created } = record.excel.categories;
+  const blocks = [totalsBlock(open), detailBlock(open), totalsBlock(created), detailBlock(created)];
+  // Titles over the open half and the created half.
+  const createdAt = blocks[0].width + 1 + blocks[1].width + 1;
+  const end = createdAt + blocks[2].width + 1 + blocks[3].width - 1;
+  const titleRow = [];
+  titleRow[0] = title(`Open Tickets as of ${ddmm(record.week.to)} by ${field}`);
+  titleRow[createdAt] = title(`Created Tickets ${shortWeek(record.week)} by ${field}`);
+  return {
+    name: 'Tickets by Category Breakdown',
+    columns: [30, 10, 2, 40, 10, 10, 14, 2, 30, 10, 2, 40, 10, 10, 14],
+    merges: [`A1:${columnName(createdAt - 2)}1`, `${columnName(createdAt)}1:${columnName(end)}1`],
+    rows: [titleRow, [], ...sideBySide(blocks), [], ['LW: the same count a week earlier (open at the end of the week before; created in the week before).']],
+  };
+}
+
+function trendBlock(group, week) {
+  const rows = [
+    [title(`Top 10 ${group.label} issues`)],
+    [header('Rank'), header('Issue trend'), header('Number of tickets'), header('Devices affected'), header('Description / example')],
+  ];
+  if (group.error) rows.push([null, { v: `The AI trends could not be written this time (${group.error}). Rebuild the week to try again.`, style: 'wrap' }]);
+  else if (!group.trends.length) rows.push([null, group.tickets ? 'No trends found.' : `No ${group.label} tickets created ${shortWeek(week)}.`]);
+  for (const t of group.trends) {
+    rows.push([{ v: t.rank, style: 'top' }, { v: t.title, style: 'wrap' }, { v: t.count, style: 'top' }, { v: t.devices, style: 'wrap' }, { v: t.example ? `Example: ${t.exampleKey} — ${t.example}` : t.exampleKey, style: 'wrap' }]);
+  }
+  if (group.sent && group.sent < group.tickets) rows.push([null, `From the newest ${group.sent} of ${group.tickets} tickets.`]);
+  return { width: 5, rows };
+}
+
+function trendSheet(record) {
+  const trends = record.excel.trends;
+  const name = 'Trend Analysis by Overview';
+  if (!trends) return { name, columns: [100], rows: [[title('Top issues by trend')], ['The issue trends are written by AI when the week is built. Turn on AI for this report in Customer Insights settings → Weekly report, then rebuild the week.']] };
+  const groups = trends.groups.slice(0, 2);
+  if (!groups.length) return { name, columns: [100], rows: [[title('Top issues by trend')], ['No tickets with a category were created this week.']] };
+  return {
+    name,
+    columns: [6, 34, 11, 26, 70, 2, 6, 34, 11, 26, 70].slice(0, groups.length * 6 - 1),
+    rows: [...sideBySide(groups.map((g) => trendBlock(g, record.week))), [], ['Grouped by AI from each ticket’s overview (the AI ticket summary) when the week was built. Counts are the tickets in each trend.']],
+  };
+}
+
+/** A ticket list as a sheet: header row kept in view, filters on. */
+function listSheet(name, list, rows) {
+  const cell = (v, c) => {
+    if (v === null || v === undefined || v === '') return null;
+    if (c?.type === 'datetime') return { v, style: 'datetime' };
+    if (c?.type === 'date') return { v, style: 'date' };
+    return v;
+  };
+  return {
+    name,
+    columns: list.columns.map((c) => c.width || 16),
+    freeze: 1,
+    autoFilter: `A1:${columnName(list.columns.length - 1)}${rows.length + 1}`,
+    rows: [list.columns.map((c) => header(c.label)), ...rows.map((r) => r.cells.map((v, i) => cell(v, list.columns[i])))],
+  };
+}
+
+const sameName = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+
+/**
+ * The workbook's sheets. Weeks built with the Excel figures (record.excel) get
+ * the Ryanair layout; `lists` ({ open, created }: { columns, rows }) adds the
+ * ticket sheets. Weeks built before keep the earlier layout.
+ */
+export function weeklySheets(record, lists = null) {
+  const rest = [workloadSheet(record), actionsSheet(record), progressSheet(record)];
+  if (!record.excel) return [metricsSheet(record), issuesSheet(record), ...rest];
+  const label = shortWeek(record.week);
+  const listSheets = lists ? [
+    listSheet('Open Tickets', lists.open, lists.open.rows),
+    listSheet(label, lists.created, lists.created.rows),
+    ...record.excel.focus.map((f) => listSheet(`${f.label} Tickets ${label}`, lists.created, lists.created.rows.filter((r) => sameName(r.category, f.name)))),
+  ] : [];
+  return [
+    backlogSheet(record),
+    record.excel.categories ? categorySheet(record) : issuesSheet(record),
+    trendSheet(record),
+    ...listSheets,
+    ...rest,
+  ];
+}
+
+export function weeklyWorkbook(record, lists = null) {
+  return workbook(weeklySheets(record, lists));
 }
 
 export function weeklyFileName(record) {

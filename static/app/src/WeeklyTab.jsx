@@ -52,6 +52,7 @@ export default function WeeklyTab() {
   const [notes, setNotes] = useState(null);
   const [busy, setBusy] = useState('');
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [excelBusy, setExcelBusy] = useState('');
   const [message, setMessage] = useState(null);
 
   const loadList = () => invoke('getWeeklyReports').then((result) => {
@@ -120,7 +121,17 @@ export default function WeeklyTab() {
         </select>
       </Field>
       <div className="nq-inline">
-        {record?.builtAt && <Button onClick={() => downloadWeeklyExcel({ ...record, notes })}>Download Excel</Button>}
+        {record?.builtAt && <Button disabled={Boolean(excelBusy)} onClick={async () => {
+          setExcelBusy('Preparing…');
+          try {
+            await downloadWeeklyExcel({ ...record, notes }, {
+              loadRows: (list, nextPageToken) => invoke('weeklyTicketRows', { id: reportId, from, list, nextPageToken }),
+              onProgress: setExcelBusy,
+            });
+          } catch (e) {
+            setMessage({ kind: 'error', text: `The Excel file could not be created: ${e.message || e}` });
+          } finally { setExcelBusy(''); }
+        }}>{excelBusy || 'Download Excel'}</Button>}
         {record?.builtAt && <Button disabled={pdfBusy} onClick={async () => {
           setPdfBusy(true);
           try {

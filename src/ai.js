@@ -202,7 +202,7 @@ export function parseMerges(raw, groupCount) {
     .filter((issue) => issue.title && issue.members.length > 0);
 }
 
-export async function callTool(chatFn, models, messages, tool) {
+export async function callTool(chatFn, models, messages, tool, { maxTokens = 2000 } = {}) {
   let lastError;
   for (const model of models) {
     try {
@@ -211,7 +211,7 @@ export async function callTool(chatFn, models, messages, tool) {
         messages,
         tools: [tool],
         tool_choice: { type: 'function', function: { name: tool.function.name } },
-        max_completion_tokens: 2000,
+        max_completion_tokens: maxTokens,
       });
       return { raw: argumentsOf(response, tool.function.name), model };
     } catch (error) {

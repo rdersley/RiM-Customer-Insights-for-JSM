@@ -3,12 +3,16 @@
 // and in tests. An .xlsx file is a zip of XML parts; this writes the zip
 // uncompressed ("stored"), which every spreadsheet program reads.
 //
-// workbook([{ name, columns: [width…], rows: [[cell…]…] }]) → Uint8Array
+// workbook([{ name, columns: [width…], rows: [[cell…]…], freeze, autoFilter, merges }]) → Uint8Array
 // A cell is a string, a number, null (empty), or { v, style } with style
-// 'bold' | 'title' | 'percent' | 'decimal' | 'wrap'. Percentages are given as
-// numbers out of 100 (42.5 → 42.5%).
+// 'bold' | 'title' | 'percent' | 'decimal' | 'wrap' | 'header' | 'datetime' |
+// 'date' | 'boldPercent' | 'top' (top-aligned, beside wrapped text).
+// Percentages are given as numbers out of 100
+// (42.5 → 42.5%); dates as Excel date numbers. `freeze`: rows kept in view at
+// the top; `autoFilter`: a range such as 'A1:Z40'; `merges`: ranges such as 'A1:H1'.
 
-const STYLES = { bold: 1, title: 2, percent: 3, decimal: 4, wrap: 5 };
+const STYLES = { bold: 1, title: 2, percent: 3, decimal: 4, wrap: 5, header: 6, datetime: 7, date: 8, boldPercent: 9, top: 10 };
+const PERCENT = new Set(['percent', 'boldPercent']);
 const encoder = new TextEncoder();
 
 const escapeXml = (s) => String(s)
@@ -37,30 +41,38 @@ function cellXml(cell, ref) {
   const { v, style } = cell !== null && typeof cell === 'object' ? cell : { v: cell };
   if (v === null || v === undefined || v === '') return style ? `<c r="${ref}" s="${STYLES[style] || 0}"/>` : '';
   const s = STYLES[style] ? ` s="${STYLES[style]}"` : '';
-  if (typeof v === 'number' && Number.isFinite(v)) return `<c r="${ref}"${s}><v>${style === 'percent' ? v / 100 : v}</v></c>`;
+  if (typeof v === 'number' && Number.isFinite(v)) return `<c r="${ref}"${s}><v>${PERCENT.has(style) ? v / 100 : v}</v></c>`;
   return `<c r="${ref}"${s} t="inlineStr"><is><t xml:space="preserve">${escapeXml(String(v).slice(0, 32767))}</t></is></c>`;
 }
 
-function sheetXml({ columns = [], rows = [] }) {
+function sheetXml({ columns = [], rows = [], freeze = 0, autoFilter = '', merges = [] }) {
+  const view = freeze ? `<sheetViews><sheetView workbookViewId="0"><pane ySplit="${freeze}" topLeftCell="A${freeze + 1}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>` : '';
+  const filter = autoFilter ? `<autoFilter ref="${autoFilter}"/>` : '';
+  const merged = merges.length ? `<mergeCells count="${merges.length}">${merges.map((m) => `<mergeCell ref="${m}"/>`).join('')}</mergeCells>` : '';
   const cols = columns.length ? `<cols>${columns.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${Number(w) || 12}" customWidth="1"/>`).join('')}</cols>` : '';
   const body = rows.map((row, r) => `<row r="${r + 1}">${(row || []).map((cell, c) => cellXml(cell, `${columnName(c)}${r + 1}`)).join('')}</row>`).join('');
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${cols}<sheetData>${body}</sheetData></worksheet>`;
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${view}${cols}<sheetData>${body}</sheetData>${filter}${merged}</worksheet>`;
 }
 
 const STYLES_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
   + '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-  + '<numFmts count="2"><numFmt numFmtId="164" formatCode="0.0%"/><numFmt numFmtId="165" formatCode="0.0"/></numFmts>'
+  + '<numFmts count="4"><numFmt numFmtId="164" formatCode="0.0%"/><numFmt numFmtId="165" formatCode="0.0"/><numFmt numFmtId="166" formatCode="dd/mm/yyyy hh:mm"/><numFmt numFmtId="167" formatCode="dd/mm/yyyy"/></numFmts>'
   + '<fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="14"/><name val="Calibri"/></font></fonts>'
-  + '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>'
-  + '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
+  + '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFD9E1F2"/><bgColor indexed="64"/></patternFill></fill></fills>'
+  + '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left/><right/><top/><bottom style="thin"><color rgb="FF8EA9DB"/></bottom><diagonal/></border></borders>'
   + '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
-  + '<cellXfs count="6">'
+  + '<cellXfs count="11">'
   + '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
   + '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>'
   + '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>'
   + '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>'
   + '<xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>'
   + '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>'
+  + '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment wrapText="1" vertical="center"/></xf>'
+  + '<xf numFmtId="166" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>'
+  + '<xf numFmtId="167" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>'
+  + '<xf numFmtId="164" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/>'
+  + '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="top"/></xf>'
   + '</cellXfs></styleSheet>';
 
 /** The workbook's parts: [path, xml]. */
@@ -78,7 +90,10 @@ export function workbookParts(sheets) {
       + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
     ['xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>'
       + named.map((s, i) => `<sheet name="${escapeXml(s.name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('')
-      + '</sheets></workbook>'],
+      + '</sheets>'
+      // Excel expects a filter's range as a hidden name too.
+      + (named.some((s) => s.autoFilter) ? `<definedNames>${named.map((s, i) => (s.autoFilter ? `<definedName name="_xlnm._FilterDatabase" localSheetId="${i}" hidden="1">'${escapeXml(s.name.replace(/'/g, "''"))}'!${s.autoFilter.replace(/([A-Z]+)(\d+)/g, '$$$1$$$2')}</definedName>` : '')).join('')}</definedNames>` : '')
+      + '</workbook>'],
     ['xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
       + named.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('')
       + `<Relationship Id="rId${named.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`],
