@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.39.0 (2026-11-25)
+
+- **Weekly SD report Excel in the Ryanair weekly workbook layout.** Weeks built from now on download with:
+  - *Backlog and Ticket Activity*: the last three weeks side by side: open at the end of each week (counted ticket by ticket), created (in all, per organisation and per focus category), resolved, % resolved, average open ticket age, created and resolved week on week.
+  - *Tickets by Category Breakdown*: open tickets at the end of the week and tickets created in it, by category, and by category with its subcategories against last week (LW) and the week-on-week change.
+  - *Trend Analysis by Overview*: top 10 issue trends for each of two focus categories (e.g. vPOS and Hardware): trend, number of tickets, devices affected and an example ticket. Grouped by AI once when the week is built, from each ticket's AI summary (or its title); the counts are made from the tickets the AI put in each trend. Follows the report's AI setting.
+  - Ticket sheets: *Open Tickets* (open at the end of the week), the week's created tickets, and one per focus category, with the workbook's columns (Key … Ticket overview; named fields the site lacks are left out), dates in Irish time, the header row kept in view and filters on. Read from Jira page by page when someone downloads (agents, and portal customers for published weeks); not stored.
+  - Then Workload, Action register and Insights and progress, as before. Weeks built before keep the earlier layout until rebuilt.
+- Settings → Weekly report: **Focus categories for Excel** (up to two, each with a short sheet name). Empty: the two biggest categories each week.
+- The weekly build also reads every open ticket (for the backlog per week) and three weeks back instead of two.
+
 ## 1.38.0 (2026-11-23)
 
 - **AI ticket summaries: open tickets refreshed at most every 4 hours.** Since 1.36.1 all remaining AI cost was ticket summaries on Haiku (about $0.85 a day), mostly busy email threads summarised again after every reply. Now a new ticket is still summarised after 20 quiet minutes and a resolved one straight away, but an open ticket summarised less than 4 hours ago is deferred; a catch-up window 4 hours later summarises it once with everything that changed. Deferred tickets are skipped before their comments are read. Setting: Settings → Customers → AI ticket summaries → "Update open tickets' summaries at most every (hours)", 0–24, default 4 (also for settings saved before; 0 = every change). Run logs count "deferred".

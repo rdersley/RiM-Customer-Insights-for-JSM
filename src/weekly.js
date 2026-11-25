@@ -12,6 +12,9 @@ export const WEEKS_KEPT = 12;
 export const NO_CATEGORY = 'No category';
 export const NOTE_LIMITS = { text: 4000, actions: 30, action: 300, owner: 80, due: 40, status: 40 };
 export const ACTION_STATUSES = ['Open', 'In progress', 'Done', 'On hold'];
+// Categories with their own top-10 issue trends and ticket sheet in Excel (e.g. vPOS, Hardware).
+export const MAX_FOCUS = 2;
+export const FOCUS_LABEL = 12;
 const DAY = 86400000;
 const HOUR = 3600000;
 
@@ -110,6 +113,9 @@ export function sanitizeWeekly(input, organizations = [], selectable = []) {
       portal: r?.portal === true,
       // Insights and suggested actions written by AI at each build (src/weeklyAi.js).
       aiNotes: r?.aiNotes !== false,
+      focus: (Array.isArray(r?.focus) ? r.focus : [])
+        .map((f) => ({ name: clip(f?.name, 80), label: clip(f?.label, FOCUS_LABEL) }))
+        .filter((f) => f.name).slice(0, MAX_FOCUS),
     };
   }).filter(Boolean).slice(0, MAX_WEEKLY_REPORTS);
   return { reports };
@@ -297,4 +303,81 @@ export function changeText(value, unit = '%') {
   if (value === null || value === undefined) return '–';
   if (value === 0) return unit === '%' ? '0%' : `0${unit}`;
   return `${value > 0 ? '+' : '−'}${Math.abs(value)}${unit}`;
+}
+
+// ---- Excel workbook figures (src/weeklyExcel.js) --------------------------------
+// Computed from every ticket open now or created or resolved since three weeks
+// before, so the backlog at the end of each week is counted ticket by ticket.
+
+const DAY_MS = DAY;
+const openAt = (t, at) => t.created < at && (t.resolved === null || t.resolved >= at);
+const sameName = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+
+/** "09.11-15.11": a week as the Ryanair workbook labels it. */
+export const shortWeek = (w) => `${w.from.slice(8, 10)}.${w.from.slice(5, 7)}-${w.to.slice(8, 10)}.${w.to.slice(5, 7)}`;
+
+/** The focus categories: as set, or the two with most tickets created in the week. */
+export function focusOf(config, tickets, week) {
+  if (config.focus?.length) return config.focus.map((f) => ({ name: f.name, label: f.label || f.name }));
+  const counts = new Map();
+  for (const t of tickets) if (inWeek(t.created, week) && t.category !== NO_CATEGORY) counts.set(t.category, (counts.get(t.category) || 0) + 1);
+  return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, MAX_FOCUS).map(([name]) => ({ name, label: name }));
+}
+
+export const inFocus = (t, focus) => sameName(t.category, focus.name);
+
+/**
+ * Backlog and ticket activity for the last `count` weeks, oldest first: open at
+ * the end of each week, created (in all, per organisation and per focus
+ * category), resolved, average age of the open tickets and the change on the week before.
+ */
+export function backlogWeeks(tickets, week, { organizations = [], focus = [] } = {}, count = 3) {
+  const weeks = [];
+  for (let w = week, i = 0; i < count; i += 1, w = previousWeek(w)) weeks.unshift(w);
+  const rows = weeks.map((w) => {
+    const open = tickets.filter((t) => openAt(t, w.end));
+    const openStart = tickets.filter((t) => openAt(t, w.start)).length;
+    const created = tickets.filter((t) => inWeek(t.created, w));
+    const resolved = tickets.filter((t) => inWeek(t.resolved, w)).length;
+    return {
+      from: w.from,
+      to: w.to,
+      open: open.length,
+      created: created.length,
+      createdByOrg: organizations.length > 1 ? organizations.map((o) => ({ name: o.name, count: created.filter((t) => t.orgs.includes(o.name)).length })) : [],
+      createdByFocus: focus.map((f) => ({ name: f.name, label: f.label, count: created.filter((t) => inFocus(t, f)).length })),
+      resolved,
+      resolvedPct: pct(resolved, openStart + created.length),
+      avgOpenAgeDays: open.length ? round1(open.reduce((n, t) => n + (w.end - t.created), 0) / open.length / DAY_MS) : null,
+    };
+  });
+  return rows.map((r, i) => ({ ...r, createdChange: i ? change(r.created, rows[i - 1].created) : null, resolvedChange: i ? change(r.resolved, rows[i - 1].resolved) : null }));
+}
+
+/** Tickets by category, each with its subcategories, against the same count a week before; largest first. */
+function categoryTree(now, before) {
+  const tree = new Map();
+  const add = (t, key) => {
+    const cat = tree.get(t.category) || { name: t.category, count: 0, previous: 0, children: new Map() };
+    cat[key] += 1;
+    if (t.subcategory) {
+      const child = cat.children.get(t.subcategory) || { name: t.subcategory, count: 0, previous: 0 };
+      child[key] += 1;
+      cat.children.set(t.subcategory, child);
+    }
+    tree.set(t.category, cat);
+  };
+  now.forEach((t) => add(t, 'count'));
+  before.forEach((t) => add(t, 'previous'));
+  const order = (a, b) => b.count - a.count || b.previous - a.previous || a.name.localeCompare(b.name);
+  return [...tree.values()].map((c) => ({ ...c, children: [...c.children.values()].sort(order) })).sort(order);
+}
+
+/** Open tickets at the end of the week and tickets created in it, by category and subcategory, with the week before. */
+export function categoryTables(tickets, week) {
+  const before = previousWeek(week);
+  return {
+    open: categoryTree(tickets.filter((t) => openAt(t, week.end)), tickets.filter((t) => openAt(t, before.end))),
+    created: categoryTree(tickets.filter((t) => inWeek(t.created, week)), tickets.filter((t) => inWeek(t.created, before))),
+  };
 }

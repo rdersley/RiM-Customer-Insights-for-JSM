@@ -137,3 +137,82 @@ export function notesAfterBuild(existing, suggested) {
   const progress = (key) => suggested[key] || existing?.notes?.[key] || '';
   return { ...EMPTY_NOTES, ...existing?.notes, insights: suggested.insights, actions: suggested.actions, completed: progress('completed'), inProgress: progress('inProgress'), nextSteps: progress('nextSteps') };
 }
+
+// ---- Top 10 issue trends per focus category (Excel "Trend analysis") -------------
+// The model groups the week's tickets in a category by the problem reported and
+// says which tickets are in each group; the counts are made here from those keys.
+
+export const MAX_TRENDS = 10;
+const TREND_TICKETS = 300; // per category; newest first
+const TREND_TEXT = 350;
+
+const TREND_TOOL = {
+  type: 'function',
+  function: {
+    name: 'issue_trends',
+    description: 'Return the issue trends for the tickets given.',
+    parameters: {
+      type: 'object',
+      required: ['trends'],
+      properties: {
+        trends: {
+          type: 'array',
+          description: `Up to ${MAX_TRENDS + 2} trends, biggest first. Every ticket in at most one trend.`,
+          items: {
+            type: 'object',
+            required: ['title', 'tickets'],
+            properties: {
+              title: { type: 'string', description: 'The problem, short and specific, e.g. "PIN pad pairing failures, repeated disconnections or QR-code pairing problems".' },
+              devices: { type: 'string', description: 'Which devices are affected, from the tickets, e.g. "Mainly PIN pads; some vPOS phones". Empty when not about devices.' },
+              tickets: { type: 'array', items: { type: 'integer' }, description: 'The n of each ticket in this trend.' },
+              example: { type: 'integer', description: 'The n of one typical ticket from tickets.' },
+              exampleText: { type: 'string', description: 'One or two sentences on that ticket: what happened and what support did. No names, emails or crew codes.' },
+            },
+          },
+        },
+      },
+    },
+  },
+};
+
+const TREND_SYSTEM = `You are a service desk analyst. You get last week's tickets in one category (a number n and an overview of each).
+Group them into issue trends by the problem the customer reported, so a manager can see the top issues. Put each ticket in the trend that fits it best, and at most one. Use clear, specific titles; merge near-duplicates; leave out tickets that fit no trend.
+For each trend give the devices affected when the tickets say, the n of its tickets, and one example ticket with one or two sentences on what happened and what support did.
+Use only the text given. No people's names, emails, phone numbers or crew codes. Plain British English. Call issue_trends once.`;
+
+/** Trends from the model's answer: ticket numbers (1-based n) turned into keys, each counted once, biggest first, ranked. */
+export function parseTrends(raw, tickets) {
+  const keyOf = (n) => tickets[Number(n) - 1]?.key || '';
+  const taken = new Set();
+  return (Array.isArray(raw?.trends) ? raw.trends : []).map((t) => {
+    const keys = (Array.isArray(t?.tickets) ? t.tickets : []).map(keyOf).filter((k) => k && !taken.has(k) && taken.add(k));
+    const exampleKey = keys.includes(keyOf(t?.example)) ? keyOf(t.example) : keys[0] || '';
+    return { title: clip(t?.title, 200), devices: clip(t?.devices, 160), count: keys.length, keys, exampleKey, example: clip(t?.exampleText, 500) };
+  }).filter((t) => t.title && t.count)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, MAX_TRENDS)
+    .map((t, i) => ({ rank: i + 1, ...t }));
+}
+
+/**
+ * Top issue trends for each focus category. `groups`: [{ name, label, tickets:
+ * [{ key, text }] }]. Failures are recorded per category, never fail the build.
+ */
+export async function suggestTrends(groups, { chatFn = forgeChat, models = MODELS, at = new Date().toISOString() } = {}) {
+  const out = [];
+  for (const g of groups) {
+    const tickets = g.tickets.slice(0, TREND_TICKETS).map((t) => ({ key: t.key, text: clip(t.text, TREND_TEXT) })).filter((t) => t.key && t.text);
+    if (!tickets.length) { out.push({ name: g.name, label: g.label, tickets: 0, trends: [], model: null, error: null }); continue; }
+    try {
+      const { raw, model } = await callTool(chatFn, models, [
+        { role: 'system', content: TREND_SYSTEM },
+        { role: 'user', content: `Category: ${clip(g.name, 80)}\nTickets as JSON:\n${JSON.stringify(tickets.map((t, i) => ({ n: i + 1, text: t.text })))}` },
+      ], TREND_TOOL, { maxTokens: 6000 });
+      out.push({ name: g.name, label: g.label, tickets: g.tickets.length, sent: tickets.length, trends: parseTrends(raw, tickets), model, error: null });
+    } catch (error) {
+      console.log(`weekly: AI trends failed for ${g.name}: ${error.message}`);
+      out.push({ name: g.name, label: g.label, tickets: g.tickets.length, trends: [], model: null, error: String(error.message || error).slice(0, 300) });
+    }
+  }
+  return { at, groups: out };
+}

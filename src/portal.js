@@ -1,13 +1,16 @@
 // Customer portal resolver. Kept separate from the agent resolver (index.js):
 // portal customers can call every definition of the function their module
-// uses, so this function offers only: read my reports, and ask for a refresh.
+// uses, so this function offers only: read my reports, ask for a refresh, and
+// read a published weekly report's ticket lists for its Excel download.
 import Resolver from '@forge/resolver';
 import { asApp, route } from '@forge/api';
 import { licenseAllows } from './license.js';
 import { portalView } from './publish.js';
 import { isLive, nextCustomerRefresh } from './live.js';
 import { queueRefresh } from './liveJobs.js';
-import { listWeekly, loadLiveConfig, loadLiveState, loadLogo, loadReport, loadSettings, updateLiveState } from './storage.js';
+import { listWeekly, loadLiveConfig, loadLiveState, loadLogo, loadReport, loadSettings, loadWeekly, updateLiveState } from './storage.js';
+import { isMonday, weekOf } from './weekly.js';
+import { ticketRows } from './weeklyRows.js';
 
 const ResolverClass = Resolver.default ?? Resolver;
 const resolver = new ResolverClass();
@@ -84,6 +87,7 @@ resolver.define('reportLogos', async ({ payload, context }) => {
 const portalWeek = (r) => ({
   id: r.id, name: r.name, week: r.week, previousWeek: r.previousWeek, timeZone: r.timeZone, builtAt: r.builtAt, publishedAt: r.publishedAt,
   organizations: r.organizations, fields: r.fields, activity: r.activity, categories: r.categories, subcategories: r.subcategories, workload: r.workload, notes: r.notes,
+  excel: r.excel || null,
 });
 
 resolver.define('myWeeklyReports', async ({ context }) => {
@@ -99,6 +103,21 @@ resolver.define('myWeeklyReports', async ({ context }) => {
     reports: shown.map((r, i) => ({ id: r.id, name: r.name, weeks: weeks[i].filter((w) => w.publishedAt && w.builtAt).map(portalWeek) }))
       .filter((r) => r.weeks.length),
   };
+});
+
+// One page of a published week's ticket list, for its Excel download: the
+// report's own tickets (its organisations), for members of one of them.
+resolver.define('myWeeklyTicketRows', async ({ payload, context }) => {
+  if (!licenseAllows(context)) throw new Error('This report isn’t available.');
+  const settings = await loadSettings();
+  const config = (settings.weekly?.reports || []).find((r) => r.portal && r.id === String(payload?.id ?? ''));
+  const accountId = viewer(context);
+  if (!config || !accountId || !isMonday(payload?.from)) throw new Error('This report isn’t available to you.');
+  const mine = new Set(await organisationsOf(accountId));
+  if (!config.organizations.some((o) => mine.has(o.id))) throw new Error('This report isn’t available to you.');
+  const record = await loadWeekly(config.id, payload.from);
+  if (!record?.builtAt || !record.publishedAt) throw new Error('This week isn’t published.');
+  return ticketRows(config, weekOf(record.week.from), payload?.list, { nextPageToken: String(payload?.nextPageToken || ''), overviewFieldId: settings.ticketSummary?.fieldId || null });
 });
 
 export const handler = resolver.getDefinitions();

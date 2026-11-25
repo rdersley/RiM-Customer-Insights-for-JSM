@@ -30,6 +30,7 @@ import { summaryFieldChoices } from './ticketSummary.js';
 import { loadTicketSummaryState, saveTicketSummaryState } from './storage.js';
 import { isMonday, lastWeek, sanitizeNotes, weekOf, WEEKS_KEPT } from './weekly.js';
 import { queueWeekly } from './weeklyJobs.js';
+import { ticketRows } from './weeklyRows.js';
 import { listWeekly, loadWeekly, saveWeekly } from './storage.js';
 
 // This package is "type": "module"; Forge's bundler then hands CommonJS packages
@@ -790,6 +791,16 @@ define('publishWeekly', async ({ payload, context }) => {
   const saved = await saveWeekly({ ...record, publishedAt: payload?.publish ? new Date().toISOString() : null });
   console.log(`publishWeekly: ${config.id} ${week.from} ${saved.publishedAt ? 'published' : 'removed'}`);
   return weekSummary(saved);
+});
+
+// One page of a week's ticket list for the Excel download (src/weeklyRows.js):
+// 'open' at the end of the week or 'created' in it.
+define('weeklyTicketRows', async ({ payload, context }) => {
+  if (!licenseAllows(context)) throw new Error(UNLICENSED_MESSAGE);
+  const config = await visibleWeekly(payload?.id);
+  const week = weekFrom(payload?.from);
+  const { ticketSummary } = await loadSettings();
+  return ticketRows(config, week, payload?.list, { nextPageToken: String(payload?.nextPageToken || ''), overviewFieldId: ticketSummary?.fieldId || null });
 });
 
 // ---- Settings page (jira:adminPage): Jira admins only ------------------------

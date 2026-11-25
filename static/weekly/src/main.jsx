@@ -19,6 +19,20 @@ function Report({ report }) {
   const [from, setFrom] = useState(report.weeks[0].from);
   const record = report.weeks.find((w) => w.week.from === from) || report.weeks[0];
   const [pdfBusy, setPdfBusy] = useState(false);
+  const [excelBusy, setExcelBusy] = useState('');
+  const [excelError, setExcelError] = useState('');
+  async function excel() {
+    setExcelBusy('Preparing…');
+    setExcelError('');
+    try {
+      await downloadWeeklyExcel(record, {
+        loadRows: (list, nextPageToken) => invoke('myWeeklyTicketRows', { id: report.id, from: record.week.from, list, nextPageToken }),
+        onProgress: setExcelBusy,
+      });
+    } catch (e) {
+      setExcelError(e.message || 'The Excel file could not be created.');
+    } finally { setExcelBusy(''); }
+  }
   async function pdf() {
     setPdfBusy(true);
     try {
@@ -40,10 +54,11 @@ function Report({ report }) {
             {report.weeks.map((w) => <option key={w.week.from} value={w.week.from}>{weekLabel(w.week)}</option>)}
           </select>
         </Field>}
-        <Button appearance="primary" onClick={() => downloadWeeklyExcel(record)}>Download Excel</Button>
+        <Button appearance="primary" onClick={excel} disabled={Boolean(excelBusy)}>{excelBusy || 'Download Excel'}</Button>
         <Button onClick={pdf} disabled={pdfBusy}>{pdfBusy ? 'Preparing…' : 'Download PDF'}</Button>
       </div>
     </div>
+    {excelError && <Notice kind="error">{excelError}</Notice>}
     <WeeklyReportView record={record} />
   </section>;
 }

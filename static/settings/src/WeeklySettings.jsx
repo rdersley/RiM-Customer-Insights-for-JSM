@@ -3,7 +3,7 @@
 // whether customers see the published weeks on the portal.
 import React, { useState } from 'react';
 import { Button, Card, Field } from '@retailinmotion/ui/react';
-import { MAX_WEEKLY_ORGS, MAX_WEEKLY_REPORTS } from '../../../src/weekly.js';
+import { FOCUS_LABEL, MAX_FOCUS, MAX_WEEKLY_ORGS, MAX_WEEKLY_REPORTS } from '../../../src/weekly.js';
 
 const CATEGORY_KINDS = ['option', 'cascading', 'options', 'named', 'strings', 'requestType'];
 
@@ -52,6 +52,23 @@ function ReportEditor({ report, index, organizations, fields, onChange, onRemove
           </select>
         </Field>
       </div>
+      <Field label="Focus categories for Excel (optional)" htmlFor={id('focus-0')}
+        help="Up to two categories that get their own top 10 issue trends and ticket sheet in the Excel download, with a short name for the sheet, for example “vPos Device” as vPOS and “Faulty/Replacement Hardware” as Hardware. The category name must match the field’s first-level value. Empty: the two biggest categories each week.">
+        {Array.from({ length: MAX_FOCUS }, (_, n) => {
+          const focus = report.focus || [];
+          const item = focus[n] || { name: '', label: '' };
+          const setFocus = (change) => {
+            const next = Array.from({ length: MAX_FOCUS }, (_, k) => (k === n ? { ...item, ...change } : focus[k] || { name: '', label: '' }));
+            set({ focus: next });
+          };
+          return <div className="cs-row cs-row--pair" key={n}>
+            <input id={id(`focus-${n}`)} className="nq-input" aria-label={`Focus category ${n + 1}`} placeholder={n ? 'e.g. Faulty/Replacement Hardware' : 'e.g. vPos Device'}
+              maxLength={80} value={item.name} onChange={(e) => setFocus({ name: e.target.value })} />
+            <input className="nq-input" aria-label={`Short name ${n + 1}`} placeholder={n ? 'e.g. Hardware' : 'e.g. vPOS'}
+              maxLength={FOCUS_LABEL} value={item.label} onChange={(e) => setFocus({ label: e.target.value })} />
+          </div>;
+        })}
+      </Field>
       <label className="cs-check">
         <input type="checkbox" className="nq-check" checked={report.aiNotes !== false} onChange={(e) => set({ aiNotes: e.target.checked })} />
         <span>Write insights, suggest actions and draft the progress notes with AI when each week is built</span>
