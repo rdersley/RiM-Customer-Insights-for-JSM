@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.40.0 (2026-11-25)
+
+- **Week-by-week comparison table** ("Backlog and ticket activity": the last three weeks side by side: open, created (in all, per organisation, per focus category), resolved, % resolved, average open ticket age, created and resolved week on week) on the Weekly report page, the portal and the PDF, after Key metrics. Week-on-week changes are green when better (fewer created, more resolved) and red when worse. For weeks built from 1.39.0.
+- Excel: the Backlog and Ticket Activity sheet is a boxed table like the Ryanair workbook: shaded labels, borders, green/red week-on-week figures.
+
 ## 1.39.0 (2026-11-25)
 
 - **Weekly SD report Excel in the Ryanair weekly workbook layout.** Weeks built from now on download with:

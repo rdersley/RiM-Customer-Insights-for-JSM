@@ -4,7 +4,7 @@
 // issue trends, ticket lists); then workload, the action register and
 // progress. Built in the browser from the stored week and, for the ticket
 // lists, pages read from Jira (src/weeklyRows.js).
-import { noteLines, shortWeek, weekLabel } from './weekly.js';
+import { comparisonRows, noteLines, shortWeek, weekLabel } from './weekly.js';
 import { columnName, workbook } from './xlsx.js';
 
 const bold = (v) => ({ v, style: 'bold' });
@@ -123,25 +123,20 @@ const ddmm = (iso) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
 /** Backlog and ticket activity over the last three weeks, oldest first. */
 function backlogSheet(record) {
   const weeks = record.excel.backlog;
-  const row = (label, read) => [label, ...weeks.map(read)];
-  const orgs = weeks[0]?.createdByOrg || [];
-  const focus = weeks[0]?.createdByFocus || [];
+  // A boxed table: shaded labels, week columns, week-on-week changes green (better) or red (worse).
+  const value = (r, v, i) => {
+    if (r.kind === 'change') return { v, style: r.tones?.[i] === 'good' ? 'boxGood' : r.tones?.[i] === 'bad' ? 'boxBad' : 'boxPercent' };
+    return { v, style: r.kind === 'percent' ? 'boxPercent' : r.kind === 'decimal' ? 'boxDecimal' : r.bold ? 'boxBold' : 'box' };
+  };
   return {
     name: 'Backlog and Ticket Activity',
     columns: [40, ...weeks.map(() => 14)],
     rows: [
       [title('Backlog and Ticket Activity')],
-      [header(''), ...weeks.map((w) => header(shortWeek(w)))],
-      row(bold('Total Open Tickets'), (w) => w.open),
-      row(bold('Created Tickets'), (w) => w.created),
-      ...orgs.map((o, i) => row(`Created – ${o.name}`, (w) => w.createdByOrg[i]?.count ?? null)),
-      ...focus.map((f, i) => row(`Created ${f.label} Tickets`, (w) => w.createdByFocus[i]?.count ?? null)),
-      row(bold('Total Resolved Tickets'), (w) => w.resolved),
-      row('% tickets resolved', (w) => percent(w.resolvedPct)),
-      row('Average open ticket age (days)', (w) => decimal(w.avgOpenAgeDays)),
-      row('Created WoW %', (w) => percent(w.createdChange)),
-      row('Resolved WoW %', (w) => percent(w.resolvedChange)),
+      [null, ...weeks.map((w) => ({ v: shortWeek(w), style: 'boxHeader' }))],
+      ...comparisonRows(weeks).map((r) => [{ v: r.label, style: r.bold ? 'boxLabelBold' : 'boxLabel' }, ...r.values.map((v, i) => value(r, v, i))]),
       [],
+      ['Week on week: green is better (fewer created, more resolved), red is worse.'],
       ['Open tickets: open at the end of each week (Sunday midnight, Irish time). Age: days from created to the end of the week, averaged over those tickets.'],
       ['% resolved = tickets resolved in the week ÷ (tickets open at the start of the week + tickets created in it).'],
     ],

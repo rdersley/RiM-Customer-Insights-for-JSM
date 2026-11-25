@@ -3,7 +3,7 @@
 // and the Excel workbook (src/weeklyExcel.js): key metrics, top issues,
 // workload, insights, the action register and progress. Plain data, so it can
 // be tested without a PDF library.
-import { changeText, noteLines, weekLabel } from './weekly.js';
+import { changeText, comparisonRows, noteLines, shortWeek, weekLabel } from './weekly.js';
 import { minutesText } from './agents.js';
 
 const n = (value) => (value === null || value === undefined ? '–' : Number(value).toLocaleString('en-GB'));
@@ -37,6 +37,21 @@ function metrics(record) {
       ],
     }],
     notes: ['% resolved = tickets resolved in the week ÷ (tickets open at the start of the week + tickets created in it).'],
+  };
+}
+
+/** The last three weeks side by side, as in the Excel workbook (weeks built from 1.39.0). */
+function comparison(record) {
+  const backlog = record.excel?.backlog;
+  if (!backlog?.length) return null;
+  const cell = (r, v) => (r.kind === 'percent' ? pct(v) : r.kind === 'decimal' ? dec(v) : r.kind === 'change' ? changeText(v) : n(v));
+  return {
+    title: 'Backlog and ticket activity',
+    tables: [{
+      columns: [{ label: 'Week', weight: 3 }, ...backlog.map((w) => ({ label: shortWeek(w), align: 'right', weight: 1.2 }))],
+      rows: comparisonRows(backlog).map((r) => ({ bold: r.bold, tones: r.tones ? [null, ...r.tones] : undefined, cells: [r.label, ...r.values.map((v) => cell(r, v))] })),
+    }],
+    notes: ['Open tickets: open at the end of each week (Sunday midnight, Irish time). Week on week: green is better (fewer created, more resolved), red is worse.'],
   };
 }
 
@@ -102,6 +117,7 @@ export function weeklyPdfContent(record) {
     built: record.builtAt ? new Date(record.builtAt).toLocaleString('en-IE', { timeZone: 'Europe/Dublin', dateStyle: 'medium', timeStyle: 'short' }) : '',
     sections: [
       metrics(record),
+      comparison(record),
       issues(record),
       workload(record),
       bullets('Insights', n2.insights),

@@ -191,10 +191,14 @@ test('the workbook follows the Ryanair layout, with ticket sheets per focus cate
   assert.deepEqual(sheets.map((s) => s.name), ['Backlog and Ticket Activity', 'Tickets by Category Breakdown', 'Trend Analysis by Overview', 'Open Tickets', '09.11-15.11',
     'vPOS Tickets 09.11-15.11', 'Hardware Tickets 09.11-15.11', 'Workload', 'Action register', 'Insights and progress']);
   const backlog = sheets[0].rows;
-  assert.deepEqual(backlog[1].map((c) => c.v), ['', '26.10-01.11', '02.11-08.11', '09.11-15.11']);
-  assert.deepEqual(backlog[2].slice(1), [2, 2, 4]);
-  assert.ok(backlog.some((r) => r[0] === 'Created – Ryanair Crew'));
-  assert.ok(backlog.some((r) => r[0] === 'Created Hardware Tickets' && r[3] === 2));
+  assert.deepEqual(backlog[1].map((c) => c?.v ?? null), [null, '26.10-01.11', '02.11-08.11', '09.11-15.11']);
+  assert.deepEqual(backlog[2].map((c) => c.v), ['Total Open Tickets', 2, 2, 4]);
+  assert.deepEqual(backlog[2].map((c) => c.style), ['boxLabelBold', 'boxBold', 'boxBold', 'boxBold']);
+  assert.ok(backlog.some((r) => r[0]?.v === 'Created – Ryanair Crew' && r[0].style === 'boxLabel'));
+  assert.ok(backlog.some((r) => r[0]?.v === 'Created Hardware Tickets' && r[3].v === 2));
+  // Created up 200% is worse (red); resolved down from 1 to 1 is no change; the first week has nothing to compare.
+  const createdWow = backlog.find((r) => r[0]?.v === 'Created WoW %');
+  assert.deepEqual(createdWow.slice(1).map((c) => [c.v, c.style]), [[null, 'boxPercent'], [0, 'boxPercent'], [200, 'boxBad']]);
   const cat = sheets[1];
   assert.equal(cat.rows[0][0].v, 'Open Tickets as of 15.11 by Module type');
   assert.equal(cat.rows[0][8].v, 'Created Tickets 09.11-15.11 by Module type');
@@ -218,4 +222,26 @@ test('the workbook follows the Ryanair layout, with ticket sheets per focus cate
   // Without the lists (or for weeks built before), no ticket sheets.
   assert.equal(weeklySheets(record).length, 6);
   assert.equal(weeklySheets(report).map((s) => s.name)[0], 'Key metrics');
+});
+
+test('comparison rows: the same figures and colours for the page, PDF and Excel', async () => {
+  const { comparisonRows } = await import('../src/weekly.js');
+  const { weeklyPdfContent } = await import('../src/weeklyPdf.js');
+  const backlog = [
+    { from: '2026-10-26', to: '2026-11-01', open: 10, created: 5, resolved: 4, resolvedPct: 20, avgOpenAgeDays: 30, createdChange: null, resolvedChange: null, createdByOrg: [], createdByFocus: [{ label: 'vPOS', count: 2 }] },
+    { from: '2026-11-02', to: '2026-11-08', open: 12, created: 8, resolved: 3, resolvedPct: 15, avgOpenAgeDays: 31.5, createdChange: 60, resolvedChange: -25, createdByOrg: [], createdByFocus: [{ label: 'vPOS', count: 4 }] },
+  ];
+  const rows = comparisonRows(backlog);
+  assert.deepEqual(rows.map((r) => r.label), ['Total Open Tickets', 'Created Tickets', 'Created vPOS Tickets', 'Total Resolved Tickets', '% tickets resolved', 'Average open ticket age (days)', 'Created WoW %', 'Resolved WoW %']);
+  assert.deepEqual(rows.find((r) => r.label === 'Created WoW %').tones, [null, 'bad']);
+  assert.deepEqual(rows.find((r) => r.label === 'Resolved WoW %').tones, [null, 'bad']);
+  assert.deepEqual(comparisonRows([{ ...backlog[1], createdChange: -10, resolvedChange: 30 }]).slice(-2).map((r) => r.tones), [['good'], ['good']]);
+  assert.deepEqual(comparisonRows(undefined), []);
+  // The PDF puts it after Key metrics; weeks built before 1.39.0 leave it out.
+  const record = { name: 'R', week: { from: '2026-11-02', to: '2026-11-08' }, organizations: [], fields: {}, activity: { all: { previous: {} }, byOrg: [] }, categories: null, workload: { totals: { resolved: 0 }, previous: {}, rows: [] }, notes: {} };
+  const withTable = weeklyPdfContent({ ...record, excel: { backlog } }).sections;
+  assert.equal(withTable[1].title, 'Backlog and ticket activity');
+  const wow = withTable[1].tables[0].rows.find((r) => r.cells[0] === 'Created WoW %');
+  assert.deepEqual(wow, { bold: undefined, tones: [null, null, 'bad'], cells: ['Created WoW %', '–', '+60%'] });
+  assert.notEqual(weeklyPdfContent(record).sections[1]?.title, 'Backlog and ticket activity');
 });
